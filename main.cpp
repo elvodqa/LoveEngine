@@ -12,6 +12,8 @@
 
 #include "entt/entt.hpp"
 
+
+
 struct State {
     SDL_Window* window;
     bool running;
@@ -31,10 +33,19 @@ static void check_vk_result(VkResult err)
 
 
 int main() {
+#if not NDEBUG // cmake -DNDEBUG or define somewhere else idc
+    SDL_SetLogPriorities(SDL_LogPriority::SDL_LOG_PRIORITY_DEBUG);
+#endif
+    int v = SDL_GetVersion();
+    SDL_Log("SDL: %d.%d.%d", SDL_VERSIONNUM_MAJOR(v), SDL_VERSIONNUM_MINOR(v), SDL_VERSIONNUM_MICRO(v));
+    auto platform = SDL_GetPlatform();
+    SDL_Log("Platform: %s", platform);
+
     if (!SDL_Init(SDL_INIT_VIDEO)) {
         SDL_Log("Error initializing SDL3: %s", SDL_GetError());
         return -1;
     }
+
 
     if (!SDL_Vulkan_LoadLibrary(nullptr)) { // /usr/local/lib/libvulkan.dylib
         SDL_Log("Error loading SDL3 vulkan: %s", SDL_GetError());
