@@ -61,12 +61,17 @@ int main() {
     }
 
     const std::vector<const char*> validationLayers = {
-            ///has bug
-            //"VK_LAYER_LUNARG_standard_validation"
+            "VK_LAYER_KHRONOS_validation"
     };
 
     Uint32 extensionCount;
-    auto extensions = SDL_Vulkan_GetInstanceExtensions(&extensionCount);
+    auto instance_extensions = SDL_Vulkan_GetInstanceExtensions(&extensionCount);
+
+    int count_extensions = extensionCount + 1;
+    const char **extensions = static_cast<const char **>(SDL_malloc(count_extensions * sizeof(const char *)));
+    extensions[0] = VK_EXT_DEBUG_REPORT_EXTENSION_NAME;
+    SDL_memcpy(&extensions[1], instance_extensions, extensionCount * sizeof(const char*));
+
 
     VkApplicationInfo appInfo = {};
     appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
@@ -81,8 +86,9 @@ int main() {
     instanceCreateInfo.pApplicationInfo = &appInfo;
     instanceCreateInfo.enabledLayerCount = validationLayers.size();
     instanceCreateInfo.ppEnabledLayerNames = validationLayers.data();
-    instanceCreateInfo.enabledExtensionCount = extensionCount;
+    instanceCreateInfo.enabledExtensionCount = count_extensions;
     instanceCreateInfo.ppEnabledExtensionNames = extensions;
+    instanceCreateInfo.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
 
     for (int i = 0; i < extensionCount; i++) {
         SDL_Log("Loaded extension: %s", extensions[i]);
@@ -115,6 +121,7 @@ int main() {
 
     }
 
+    vkDestroyInstance(state.instance, nullptr);
     SDL_DestroyWindow(state.window);
     SDL_Quit();
     return 0;
