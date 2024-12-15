@@ -13,7 +13,6 @@
 #include "entt/entt.hpp"
 
 
-
 struct State {
     SDL_Window* window;
     bool running;
@@ -99,6 +98,7 @@ int main() {
         check_vk_result(instanceResult);
         return -1;
     }
+    SDL_free(extensions);
 
     state.running = true;
     while (state.running) {
