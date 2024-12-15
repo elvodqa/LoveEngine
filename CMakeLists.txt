@@ -6,6 +6,7 @@ set(CMAKE_CXX_STANDARD 17)
 add_subdirectory(external/SDL EXCLUDE_FROM_ALL)
 add_subdirectory(external/VulkanMemoryAllocator EXCLUDE_FROM_ALL)
 add_subdirectory(external/entt EXCLUDE_FROM_ALL)
+add_subdirectory(external/portaudio EXCLUDE_FROM_ALL)
 
 set(VULKAN_COMPONENTS
         "glslc"
@@ -32,6 +33,11 @@ target_include_directories(LoveEngine PRIVATE external/imgui)
 if (TARGET EnTT::EnTT)
     target_link_libraries(LoveEngine PRIVATE EnTT)
     target_include_directories(LoveEngine PRIVATE external/entt/single_include)
+endif()
+
+if (TARGET PortAudio::portaudio)
+    target_link_libraries(LoveEngine PRIVATE PortAudio::portaudio)
+    target_include_directories(LoveEngine PRIVATE external/portaudio/include)
 endif()
 
 if (TARGET SDL3::SDL3)
