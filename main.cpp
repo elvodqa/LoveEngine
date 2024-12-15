@@ -53,7 +53,7 @@ int main() {
 
     State state = {0};
 
-    state.window = SDL_CreateWindow("LoveVK", 1280, 720, SDL_WINDOW_VULKAN);
+    state.window = SDL_CreateWindow("LoveVK", 1280, 720, SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
     if (state.window == nullptr) {
         SDL_Log("Error creating window: %s", SDL_GetError());
         return -1;
