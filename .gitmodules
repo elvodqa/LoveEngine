@@ -14,3 +14,6 @@
 [submodule "external/portaudio"]
 	path = external/portaudio
 	url = https://github.com/PortAudio/portaudio
+[submodule "external/volk"]
+	path = external/volk
+	url = https://github.com/zeux/volk
