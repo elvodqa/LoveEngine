@@ -52,6 +52,10 @@ static ImGui_ImplVulkanH_Window g_MainWindowData;
 static uint32_t                 g_MinImageCount = 2;
 static bool                     g_SwapChainRebuild = false;
 
+#include "editor/editor.hpp"
+
+static love::Editor* editor;
+
 static void check_vk_result(VkResult err)
 {
     if (err == 0)
@@ -480,6 +484,8 @@ int main(int, char**)
     bool show_another_window = false;
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
+    editor = new love::Editor();
+
     // Main loop
     bool done = false;
     while (!done)
@@ -519,7 +525,7 @@ int main(int, char**)
         ImGui_ImplVulkan_NewFrame();
         ImGui_ImplSDL3_NewFrame();
         ImGui::NewFrame();
-
+        /*
         // 1. Show the big demo window (Most of the sample code is in ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
         if (show_demo_window)
             ImGui::ShowDemoWindow(&show_demo_window);
@@ -555,7 +561,9 @@ int main(int, char**)
             if (ImGui::Button("Close Me"))
                 show_another_window = false;
             ImGui::End();
-        }
+        } */
+
+        editor->draw(done);
 
         // Rendering
         ImGui::Render();
