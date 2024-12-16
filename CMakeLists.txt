@@ -20,6 +20,9 @@ set(VULKAN_COMPONENTS
 add_executable(LoveEngine
         main.cpp
 
+        # editor
+        editor/editor.cpp
+
         # imgui
         external/imgui/imgui.cpp
         external/imgui/imgui_demo.cpp
