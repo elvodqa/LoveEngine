@@ -1,0 +1,8 @@
+//
+// Created by YAHAY on 17/12/2024.
+//
+
+#ifndef RENDERER_CONSTANTS_H
+#define RENDERER_CONSTANTS_H
+#define MAX_INFLIGHT_FRAMES 3
+#endif //RENDERER_CONSTANTS_H
