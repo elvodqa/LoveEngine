@@ -22,6 +22,7 @@ namespace renderer {
 
     inline uint32_t                 g_MinImageCount = 2;
     inline bool                     g_SwapChainRebuild = false;
+
     inline SDL_Window*              window = nullptr;
 
     void init();

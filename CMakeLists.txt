@@ -8,6 +8,7 @@ add_subdirectory(external/VulkanMemoryAllocator EXCLUDE_FROM_ALL)
 add_subdirectory(external/entt EXCLUDE_FROM_ALL)
 add_subdirectory(external/portaudio EXCLUDE_FROM_ALL)
 add_subdirectory(external/volk EXCLUDE_FROM_ALL)
+add_subdirectory(external/freetype EXCLUDE_FROM_ALL)
 add_subdirectory(external/nlohmann_json EXCLUDE_FROM_ALL)
 add_subdirectory(external/glm EXCLUDE_FROM_ALL)
 
@@ -25,6 +26,7 @@ add_executable(LoveEngine
 
         # editor
         editor/editor.cpp
+        editor/editor_style.cpp
 
         # imgui
         external/imgui/imgui.cpp
@@ -41,9 +43,17 @@ add_executable(LoveEngine
         Renderer/EngineImage.cpp
         Renderer/EngineImage.h
 
+        external/imgui/misc/freetype/imgui_freetype.cpp
 )
 
+if (TARGET freetype)
+    target_link_libraries(LoveEngine PRIVATE freetype)
+    target_include_directories(LoveEngine PRIVATE external/freetype/include)
+endif()
+
 target_include_directories(LoveEngine PRIVATE external/imgui)
+target_include_directories(LoveEngine PRIVATE external/IconFontCppHeaders)
+
 
 if (TARGET EnTT::EnTT)
     target_link_libraries(LoveEngine PRIVATE EnTT)
@@ -75,6 +85,7 @@ if (TARGET glm::glm-header-only)
     target_include_directories(LoveEngine PRIVATE external/glm/include)
 endif()
 find_package(Vulkan REQUIRED)
+
 if (VULKAN_FOUND)
     message(STATUS "Found Vulkan, Including and Linking now")
 
@@ -83,6 +94,7 @@ if (VULKAN_FOUND)
 
     target_compile_definitions(LoveEngine PRIVATE IMGUI_IMPL_VULKAN_USE_VOLK)
 endif()
+
 if (WIN32)
     target_compile_definitions(LoveEngine PRIVATE VK_USE_PLATFORM_WIN32_KHR)
 elseif (APPLE)

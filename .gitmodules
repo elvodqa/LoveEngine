@@ -17,6 +17,16 @@
 [submodule "external/volk"]
 	path = external/volk
 	url = https://github.com/zeux/volk
+[submodule "external/IconFontCppHeaders"]
+	path = external/IconFontCppHeaders
+	url = https://github.com/juliettef/IconFontCppHeaders
+[submodule "external/Font-Awesome"]
+    path = external/Font-Awesome
+    url = https://github.com/FortAwesome/Font-Awesome
+    branch = 5.x
+[submodule "external/freetype"]
+	path = external/freetype
+	url = https://github.com/freetype/freetype
 [submodule "external/nlohmann_json"]
 	path = external/nlohmann_json
 	url = https://github.com/nlohmann/json.git

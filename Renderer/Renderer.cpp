@@ -33,6 +33,11 @@ void init() {
     // Create window with Vulkan graphics context
     SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_HIDDEN);
 
+    if (!SDL_Init(SDL_INIT_VIDEO)) {
+        SDL_Log("Error init SDL: %s", SDL_GetError());
+    }
+
+
     renderer::window = SDL_CreateWindow("LoveVK", 1280, 720, window_flags);
     if (window == nullptr)
     {
@@ -47,7 +52,10 @@ void init() {
         for (uint32_t n = 0; n < sdl_extensions_count; n++)
             extensions.push_back(sdl_extensions[n]);
     }
+
+#ifdef _MSC_VER
     extensions.push_back(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
+#endif
     // extensions.push_back(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
     SetupVulkan(extensions);
 

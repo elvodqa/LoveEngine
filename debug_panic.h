@@ -1,7 +1,8 @@
 #ifndef DEBUG_PANIC_H
 #define DEBUG_PANIC_H
 
-[[noreturn]] __forceinline extern void panic() {
+
+[[noreturn]] inline extern void panic() {
     *(int *)nullptr = 0xf;
     exit(-1);
 }
