@@ -5,15 +5,16 @@
 #include "imgui.h"
 #include "backends/imgui_impl_vulkan.h"
 #include <SDL3/SDL_vulkan.h>
-// #include <vma/vk_mem_alloc.h>
+#include <vk_mem_alloc.h>
 
 #include "../debug_panic.h"
 #ifdef _DEBUG
 #define APP_USE_VULKAN_DEBUG_REPORT
 #endif
 namespace renderer {
-static void SetupVulkan(ImVector<const char*> instance_extensions);
-static void SetupVulkanWindow(ImGui_ImplVulkanH_Window* wd, VkSurfaceKHR surface, int width, int height);
+    static void SetupVulkan(ImVector<const char*> instance_extensions);
+    static void SetupVulkanWindow(ImGui_ImplVulkanH_Window* wd, VkSurfaceKHR surface, int width, int height);
+    static void vma_init();
 #ifdef APP_USE_VULKAN_DEBUG_REPORT
     static VKAPI_ATTR VkBool32 VKAPI_CALL debug_report(VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT objectType, uint64_t object, size_t location, int32_t messageCode, const char* pLayerPrefix, const char* pMessage, void* pUserData)
     {
@@ -29,7 +30,7 @@ static void SetupVulkanWindow(ImGui_ImplVulkanH_Window* wd, VkSurfaceKHR surface
     }
 #endif // APP_USE_VULKAN_DEBUG_REPORT
 void init() {
-    g_Device = VK_NULL_HANDLE;
+    device = VK_NULL_HANDLE;
     // Create window with Vulkan graphics context
     SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_HIDDEN);
 
@@ -62,7 +63,7 @@ void init() {
     // Create Window Surface
     VkSurfaceKHR surface;
     VkResult err;
-    if (SDL_Vulkan_CreateSurface(window, g_Instance, g_Allocator, &surface) == 0)
+    if (SDL_Vulkan_CreateSurface(window, vk_Instance, g_vk_Allocator, &surface) == 0)
     {
         SDL_Log("Failed to create Vulkan surface.\n");
         panic();
@@ -96,13 +97,13 @@ static bool IsExtensionAvailable(const ImVector<VkExtensionProperties>& properti
 static VkPhysicalDevice SetupVulkan_SelectPhysicalDevice()
 {
     uint32_t gpu_count;
-    VkResult err = vkEnumeratePhysicalDevices(g_Instance, &gpu_count, nullptr);
+    VkResult err = vkEnumeratePhysicalDevices(vk_Instance, &gpu_count, nullptr);
     check_vk_result(err);
     IM_ASSERT(gpu_count > 0);
 
     ImVector<VkPhysicalDevice> gpus;
     gpus.resize(gpu_count);
-    err = vkEnumeratePhysicalDevices(g_Instance, &gpu_count, gpus.Data);
+    err = vkEnumeratePhysicalDevices(vk_Instance, &gpu_count, gpus.Data);
     check_vk_result(err);
 
     // If a number >1 of GPUs got reported, find discrete GPU if present, or use first one available. This covers
@@ -166,22 +167,22 @@ void SetupVulkan(ImVector<const char*> instance_extensions)
         // Create Vulkan Instance
         create_info.enabledExtensionCount = (uint32_t)instance_extensions.Size;
         create_info.ppEnabledExtensionNames = instance_extensions.Data;
-        err = vkCreateInstance(&create_info, g_Allocator, &g_Instance);
+        err = vkCreateInstance(&create_info, g_vk_Allocator, &vk_Instance);
         check_vk_result(err);
 #ifdef IMGUI_IMPL_VULKAN_USE_VOLK
-        volkLoadInstance(g_Instance);
+        volkLoadInstance(vk_Instance);
 #endif
 
         // Setup the debug report callback
 #ifdef APP_USE_VULKAN_DEBUG_REPORT
-        auto f_vkCreateDebugReportCallbackEXT = (PFN_vkCreateDebugReportCallbackEXT)vkGetInstanceProcAddr(g_Instance, "vkCreateDebugReportCallbackEXT");
+        auto f_vkCreateDebugReportCallbackEXT = (PFN_vkCreateDebugReportCallbackEXT)vkGetInstanceProcAddr(vk_Instance, "vkCreateDebugReportCallbackEXT");
         IM_ASSERT(f_vkCreateDebugReportCallbackEXT != nullptr);
         VkDebugReportCallbackCreateInfoEXT debug_report_ci = {};
         debug_report_ci.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT;
         debug_report_ci.flags = VK_DEBUG_REPORT_ERROR_BIT_EXT | VK_DEBUG_REPORT_WARNING_BIT_EXT | VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT;
         debug_report_ci.pfnCallback = debug_report;
         debug_report_ci.pUserData = nullptr;
-        err = f_vkCreateDebugReportCallbackEXT(g_Instance, &debug_report_ci, g_Allocator, &g_DebugReport);
+        err = f_vkCreateDebugReportCallbackEXT(vk_Instance, &debug_report_ci, g_vk_Allocator, &g_DebugReport);
         check_vk_result(err);
 #endif
     }
@@ -241,9 +242,9 @@ void SetupVulkan(ImVector<const char*> instance_extensions)
         create_info.pQueueCreateInfos = queue_info;
         create_info.enabledExtensionCount = (uint32_t)device_extensions.Size;
         create_info.ppEnabledExtensionNames = device_extensions.Data;
-        err = vkCreateDevice(g_PhysicalDevice, &create_info, g_Allocator, &g_Device);
+        err = vkCreateDevice(g_PhysicalDevice, &create_info, g_vk_Allocator, &device);
         check_vk_result(err);
-        vkGetDeviceQueue(g_Device, g_QueueFamily, 0, &g_Queue);
+        vkGetDeviceQueue(device, g_QueueFamily, 0, &g_Queue);
     }
 
     // Create Descriptor Pool
@@ -260,8 +261,9 @@ void SetupVulkan(ImVector<const char*> instance_extensions)
         pool_info.maxSets = 1;
         pool_info.poolSizeCount = (uint32_t)IM_ARRAYSIZE(pool_sizes);
         pool_info.pPoolSizes = pool_sizes;
-        check_vk_result(vkCreateDescriptorPool(g_Device, &pool_info, g_Allocator, &imgui_DescriptorPool));
+        check_vk_result(vkCreateDescriptorPool(device, &pool_info, g_vk_Allocator, &imgui_DescriptorPool));
     }
+        renderer::vma_init();
 }
 
 // All the ImGui_ImplVulkanH_XXX structures/functions are optional helpers used by the demo.
@@ -295,36 +297,65 @@ static void SetupVulkanWindow(ImGui_ImplVulkanH_Window* wd, VkSurfaceKHR surface
 
     // Create SwapChain, RenderPass, Framebuffer, etc.
     IM_ASSERT(g_MinImageCount >= 2);
-    ImGui_ImplVulkanH_CreateOrResizeWindow(g_Instance, g_PhysicalDevice, g_Device, wd, g_QueueFamily, g_Allocator, width, height, g_MinImageCount);
+    ImGui_ImplVulkanH_CreateOrResizeWindow(vk_Instance, g_PhysicalDevice, device, wd, g_QueueFamily, g_vk_Allocator, width, height, g_MinImageCount);
 }
 
 void CleanupVulkan()
 {
-    vkDestroyDescriptorPool(g_Device, imgui_DescriptorPool, g_Allocator);
+    vkDestroyDescriptorPool(device, imgui_DescriptorPool, g_vk_Allocator);
 
 #ifdef APP_USE_VULKAN_DEBUG_REPORT
     // Remove the debug report callback
-    auto f_vkDestroyDebugReportCallbackEXT = (PFN_vkDestroyDebugReportCallbackEXT)vkGetInstanceProcAddr(g_Instance, "vkDestroyDebugReportCallbackEXT");
-    f_vkDestroyDebugReportCallbackEXT(g_Instance, g_DebugReport, g_Allocator);
+    auto f_vkDestroyDebugReportCallbackEXT = (PFN_vkDestroyDebugReportCallbackEXT)vkGetInstanceProcAddr(vk_Instance, "vkDestroyDebugReportCallbackEXT");
+    f_vkDestroyDebugReportCallbackEXT(vk_Instance, g_DebugReport, g_vk_Allocator);
 #endif // APP_USE_VULKAN_DEBUG_REPORT
 
-    vkDestroyDevice(g_Device, g_Allocator);
-    vkDestroyInstance(g_Instance, g_Allocator);
+    vkDestroyDevice(device, g_vk_Allocator);
+    vkDestroyInstance(vk_Instance, g_vk_Allocator);
 }
 
 void CleanupVulkanWindow()
 {
-    ImGui_ImplVulkanH_DestroyWindow(g_Instance, g_Device, &imgui::imgui_MainWindowData, g_Allocator);
+    ImGui_ImplVulkanH_DestroyWindow(vk_Instance, device, &imgui::imgui_MainWindowData, g_vk_Allocator);
 }
+
+static void vma_init() {
+    VmaVulkanFunctions vma_vulkan_func{};
+    vma_vulkan_func.vkAllocateMemory                    = vkAllocateMemory;
+    vma_vulkan_func.vkBindBufferMemory                  = vkBindBufferMemory;
+    vma_vulkan_func.vkBindImageMemory                   = vkBindImageMemory;
+    vma_vulkan_func.vkCreateBuffer                      = vkCreateBuffer;
+    vma_vulkan_func.vkCreateImage                       = vkCreateImage;
+    vma_vulkan_func.vkDestroyBuffer                     = vkDestroyBuffer;
+    vma_vulkan_func.vkDestroyImage                      = vkDestroyImage;
+    vma_vulkan_func.vkFlushMappedMemoryRanges           = vkFlushMappedMemoryRanges;
+    vma_vulkan_func.vkFreeMemory                        = vkFreeMemory;
+    vma_vulkan_func.vkGetBufferMemoryRequirements       = vkGetBufferMemoryRequirements;
+    vma_vulkan_func.vkGetImageMemoryRequirements        = vkGetImageMemoryRequirements;
+    vma_vulkan_func.vkGetPhysicalDeviceMemoryProperties = vkGetPhysicalDeviceMemoryProperties;
+    vma_vulkan_func.vkGetPhysicalDeviceProperties       = vkGetPhysicalDeviceProperties;
+    vma_vulkan_func.vkInvalidateMappedMemoryRanges      = vkInvalidateMappedMemoryRanges;
+    vma_vulkan_func.vkMapMemory                         = vkMapMemory;
+    vma_vulkan_func.vkUnmapMemory                       = vkUnmapMemory;
+    vma_vulkan_func.vkCmdCopyBuffer                     = vkCmdCopyBuffer;
+    vma_vulkan_func.vkGetBufferMemoryRequirements2KHR   = vkGetBufferMemoryRequirements2;
+    vma_vulkan_func.vkGetImageMemoryRequirements2KHR    = vkGetImageMemoryRequirements2KHR;
+        vma_vulkan_func.vkBindBufferMemory2KHR              = vkBindBufferMemory2KHR;
+        vma_vulkan_func.vkBindImageMemory2KHR              = vkBindImageMemory2KHR;
+        vma_vulkan_func.vkGetPhysicalDeviceMemoryProperties2KHR              = vkGetPhysicalDeviceMemoryProperties2KHR;
+        vma_vulkan_func.vkBindImageMemory2KHR              = vkBindImageMemory2KHR;
+        vma_vulkan_func.vkBindImageMemory2KHR              = vkBindImageMemory2KHR;
+
+    VmaAllocatorCreateInfo CI = {};
+    CI.physicalDevice = g_PhysicalDevice;
+    CI.device = device;
+    CI.instance = vk_Instance;
+    CI.flags = VMA_ALLOCATOR_CREATE_KHR_DEDICATED_ALLOCATION_BIT|VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
+    CI.pVulkanFunctions=&vma_vulkan_func;
+    CI.vulkanApiVersion=VK_API_VERSION_1_2;
+
+    vmaCreateAllocator(&CI, &vma_allocator);
+
+
 }
-namespace renderer::vma {
-    // inline void init() {
-    //     VmaAllocatorCreateInfo CI = {};
-    //     CI.physicalDevice = g_PhysicalDevice;
-    //     CI.device = g_Device;
-    //     CI.instance = g_Instance;
-    //     CI.flags = VMA_ALLOCATOR_CREATE_KHR_DEDICATED_ALLOCATION_BIT|VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
-    //     CI.
-    //     vmaCreateAllocator();
-    // }
 }

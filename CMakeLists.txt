@@ -12,6 +12,7 @@ add_subdirectory(external/freetype EXCLUDE_FROM_ALL)
 add_subdirectory(external/nlohmann_json EXCLUDE_FROM_ALL)
 add_subdirectory(external/glm EXCLUDE_FROM_ALL)
 
+
 set(VULKAN_COMPONENTS
         "glslc"
         "glslangValidator"
@@ -44,6 +45,7 @@ add_executable(LoveEngine
         Renderer/EngineImage.h
 
         external/imgui/misc/freetype/imgui_freetype.cpp
+        love_resource_locator.h
 )
 
 if (TARGET freetype)
@@ -71,7 +73,7 @@ if (TARGET SDL3::SDL3)
 endif()
 
 if (TARGET VulkanMemoryAllocator)
-    target_link_libraries(LoveEngine PRIVATE VulkanMemoryAllocator)
+    target_link_libraries(LoveEngine PRIVATE GPUOpen::VulkanMemoryAllocator)
     target_include_directories(LoveEngine PRIVATE external/VulkanMemoryAllocator/include)
 endif()
 

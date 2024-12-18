@@ -16,6 +16,9 @@
 #define IMGUI_IMPL_VULKAN_USE_VOLK
 #define IMGUI_IMPL_VULKAN_HAS_DYNAMIC_RENDERING
 #define VOLK_IMPLEMENTATION
+#define VMA_IMPLEMENTATION
+#define VMA_STATIC_VULKAN_FUNCTIONS 0
+#define VMA_DYNAMIC_VULKAN_FUNCTIONS 0
 #ifdef _DEBUG
 #define APP_USE_VULKAN_DEBUG_REPORT
 #endif
@@ -23,6 +26,7 @@
 #include "backends/imgui_impl_sdl3.h"
 #include "backends/imgui_impl_vulkan.h"
 #include <volk.h>
+#include "vk_mem_alloc.h"
 #include <stdio.h>          // SDL_Log, fSDL_Log
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
@@ -60,7 +64,7 @@ static void FrameRender(ImGui_ImplVulkanH_Window* wd, ImDrawData* draw_data)
 
     VkSemaphore image_acquired_semaphore  = wd->FrameSemaphores[wd->SemaphoreIndex].ImageAcquiredSemaphore;
     VkSemaphore render_complete_semaphore = wd->FrameSemaphores[wd->SemaphoreIndex].RenderCompleteSemaphore;
-    err = vkAcquireNextImageKHR(renderer::g_Device, wd->Swapchain, UINT64_MAX, image_acquired_semaphore, VK_NULL_HANDLE, &wd->FrameIndex);
+    err = vkAcquireNextImageKHR(renderer::device, wd->Swapchain, UINT64_MAX, image_acquired_semaphore, VK_NULL_HANDLE, &wd->FrameIndex);
     if (err == VK_ERROR_OUT_OF_DATE_KHR || err == VK_SUBOPTIMAL_KHR)
     {
         renderer::g_SwapChainRebuild = true;
@@ -70,14 +74,14 @@ static void FrameRender(ImGui_ImplVulkanH_Window* wd, ImDrawData* draw_data)
 
     ImGui_ImplVulkanH_Frame* fd = &wd->Frames[wd->FrameIndex];
     {
-        err = vkWaitForFences(renderer::g_Device, 1, &fd->Fence, VK_TRUE, UINT64_MAX);    // wait indefinitely instead of periodically checking
+        err = vkWaitForFences(renderer::device, 1, &fd->Fence, VK_TRUE, UINT64_MAX);    // wait indefinitely instead of periodically checking
         check_vk_result(err);
 
-        err = vkResetFences(renderer::g_Device, 1, &fd->Fence);
+        err = vkResetFences(renderer::device, 1, &fd->Fence);
         check_vk_result(err);
     }
     {
-        err = vkResetCommandPool(renderer::g_Device, fd->CommandPool, 0);
+        err = vkResetCommandPool(renderer::device, fd->CommandPool, 0);
         check_vk_result(err);
         VkCommandBufferBeginInfo info = {};
         info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -170,9 +174,9 @@ int main(int, char**)
     // Setup Platform/Renderer backends
     ImGui_ImplSDL3_InitForVulkan(renderer::window);
     ImGui_ImplVulkan_InitInfo init_info = {};
-    init_info.Instance = renderer::g_Instance;
+    init_info.Instance = renderer::vk_Instance;
     init_info.PhysicalDevice = renderer::g_PhysicalDevice;
-    init_info.Device = renderer::g_Device;
+    init_info.Device = renderer::device;
     init_info.QueueFamily = renderer::g_QueueFamily;
     init_info.Queue = renderer::g_Queue;
     init_info.PipelineCache = renderer::g_PipelineCache;
@@ -182,7 +186,7 @@ int main(int, char**)
     init_info.MinImageCount = renderer::g_MinImageCount;
     init_info.ImageCount = renderer::imgui::wd->ImageCount;
     init_info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
-    init_info.Allocator = renderer::g_Allocator;
+    init_info.Allocator = renderer::g_vk_Allocator;
     init_info.CheckVkResultFn = check_vk_result;
     ImGui_ImplVulkan_Init(&init_info);
 
@@ -240,7 +244,7 @@ int main(int, char**)
         if (fb_width > 0 && fb_height > 0 && (renderer::g_SwapChainRebuild || renderer::imgui::imgui_MainWindowData.Width != fb_width || renderer::imgui::imgui_MainWindowData.Height != fb_height))
         {
             ImGui_ImplVulkan_SetMinImageCount(renderer::g_MinImageCount);
-            ImGui_ImplVulkanH_CreateOrResizeWindow(renderer::g_Instance, renderer::g_PhysicalDevice, renderer::g_Device, &renderer::imgui::imgui_MainWindowData, renderer::g_QueueFamily, renderer::g_Allocator, fb_width, fb_height, renderer::g_MinImageCount);
+            ImGui_ImplVulkanH_CreateOrResizeWindow(renderer::vk_Instance, renderer::g_PhysicalDevice, renderer::device, &renderer::imgui::imgui_MainWindowData, renderer::g_QueueFamily, renderer::g_vk_Allocator, fb_width, fb_height, renderer::g_MinImageCount);
             renderer::imgui::imgui_MainWindowData.FrameIndex = 0;
             renderer::g_SwapChainRebuild = false;
         }
@@ -305,7 +309,7 @@ int main(int, char**)
     }
 
     // Cleanup
-    auto err = vkDeviceWaitIdle(renderer::g_Device);
+    auto err = vkDeviceWaitIdle(renderer::device);
     check_vk_result(err);
     ImGui_ImplVulkan_Shutdown();
     ImGui_ImplSDL3_Shutdown();
