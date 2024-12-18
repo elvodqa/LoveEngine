@@ -45,6 +45,8 @@ namespace love {
         bool hideDots = true;
 
         bool b_showExplorer = true;
+        bool b_explorerSearchInputing = false;
+        char* c_explorerSearchBuffer;
         void showExplorer(bool *p_open);
 
 

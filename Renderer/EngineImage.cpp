@@ -23,7 +23,7 @@ EngineImage* EngineImage::make(VkCommandBuffer cb, ResourceLocator image_source,
                     channels==3?VK_FORMAT_R8G8B8_SRGB:
                     channels==2?VK_FORMAT_R8G8_SRGB:
                                 VK_FORMAT_R8G8B8_SRGB;
-    uint32_t mipcount = generate_mips?std::bit_width(max(width,height)):1;
+    uint32_t mipcount = generate_mips?std::bit_width(std::max(width,height)):1;
     image->width = width;
     image->height = height;
     image->format = format;

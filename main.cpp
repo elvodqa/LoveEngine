@@ -12,7 +12,7 @@
     // - Helper ImGui_ImplVulkanH_XXX functions and structures are only used by this example (main.cpp) and by
 //   the backend itself (imgui_impl_vulkan.cpp), but should PROBABLY NOT be used by your own engine/app code.
 // Read comments in imgui_impl_vulkan.h.
-#define VK_USE_PLATFORM_WIN32_KHR
+//#define VK_USE_PLATFORM_WIN32_KHR
 #define IMGUI_IMPL_VULKAN_USE_VOLK
 #define IMGUI_IMPL_VULKAN_HAS_DYNAMIC_RENDERING
 #define VOLK_IMPLEMENTATION

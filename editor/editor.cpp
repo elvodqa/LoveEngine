@@ -89,26 +89,46 @@ void love::Editor::draw(bool& done) {
 void love::Editor::showExplorer(bool *p_open) {
     ImGui::Begin("Explorer", p_open); // BEGIN EXPLORER
 
-    if (ImGui::Button("/")) {
-        currentPath = "/";
-    }
-    ImGui::SameLine();
+    if (!b_explorerSearchInputing) {
 
-    for (const auto& part : currentPath) {
-        if (part.filename() == "") {
-            continue;
+        if (ImGui::Button(ICON_FA_SEARCH)) {
+            c_explorerSearchBuffer = (char*)(currentPath.u8string().c_str());
+            b_explorerSearchInputing = true;
         }
-        if (ImGui::Button(part.c_str())) {
-            if (part.filename() != currentPath.filename()) {
-                auto pos = currentPath.string().find(part.string());
-                if (pos != std::string::npos) {
-                    currentPath = currentPath.string().substr(0, pos + part.string().size());
+
+        ImGui::SameLine();
+        if (ImGui::Button("/")) {
+            currentPath = "/";
+        }
+        ImGui::SameLine();
+
+        for (const auto& part : currentPath) {
+            if (part.filename() == "") {
+                continue;
+            }
+            if (ImGui::Button(part.c_str())) {
+                if (part.filename() != currentPath.filename()) {
+                    auto pos = currentPath.string().find(part.string());
+                    if (pos != std::string::npos) {
+                        currentPath = currentPath.string().substr(0, pos + part.string().size());
+                    }
                 }
             }
+            ImGui::SameLine();
         }
         ImGui::SameLine();
     }
-    ImGui::SameLine();
+
+    if (b_explorerSearchInputing) {
+        if (ImGui::InputText("Path", c_explorerSearchBuffer, 1024, ImGuiInputTextFlags_EnterReturnsTrue)) {
+            SDL_Log("%s", c_explorerSearchBuffer);
+            auto path = fs::path(c_explorerSearchBuffer);
+            if (exists(path)) {
+                currentPath = path;
+                b_explorerSearchInputing = false;
+            }
+        }
+    }
 
     ImGui::Separator();
 
@@ -135,7 +155,7 @@ void love::Editor::showExplorer(bool *p_open) {
                 const auto& path = entry.path();
                 std::string displayName = path.string();  // Full path
 
-                if (hideDots && path.filename().c_str()[0] == '.') {
+                if (hideDots && path.filename().string().c_str()[0] == '.') {
                     continue;
                 }
 
