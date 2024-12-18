@@ -92,7 +92,8 @@ void love::Editor::showExplorer(bool *p_open) {
     if (!b_explorerSearchInputing) {
 
         if (ImGui::Button(ICON_FA_SEARCH)) {
-            c_explorerSearchBuffer = (char*)(currentPath.u8string().c_str());
+            c_explorerSearchBuffer = new char[1024];
+            c_explorerSearchBuffer[0] = '/';
             b_explorerSearchInputing = true;
         }
 
