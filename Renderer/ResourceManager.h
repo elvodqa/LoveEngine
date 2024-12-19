@@ -8,25 +8,20 @@
 #include <vector>
 
 #include "renderer_constants.h"
-static std::pmr::vector<std::function<void()>> cleanups[MAX_INFLIGHT_FRAMES];
-static int currentFrame = 0;
-static void default_cleanup() {
+#include <volk.h>
+#include <vk_mem_alloc.h>
 
-}
+#include "Renderer.h"
+static std::vector<std::function<void()>> cleanups[MAX_INFLIGHT_FRAMES];
+static VkCommandPool commandPools[MAX_INFLIGHT_FRAMES];
+static int currentFrame = 0;
+static void default_cleanup();
 /**
  * defer for frame lifetime
  * @param fn cleanup function to run after all proccessing with current frame finishes
  */
-inline void deferffl(std::function<void()> &&fn) {
-    cleanups[currentFrame%MAX_INFLIGHT_FRAMES].push_back(std::move(fn));
-}
-inline void advance_frame_and_execute_cleanups() {
-    currentFrame++;
-    for (auto f : cleanups[currentFrame%MAX_INFLIGHT_FRAMES]) {
-        f();
-    }
-    cleanups[currentFrame%MAX_INFLIGHT_FRAMES].clear();
-    deferffl(default_cleanup);
-}
-
+void deferffl(std::function<void()> &&fn);
+void advance_frame_and_execute_cleanups();
+VkCommandBuffer make_cb_for_frame();
+void init_frame_resource_manager();
 #endif //RESOURCEMANAGER_H

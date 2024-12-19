@@ -7,7 +7,7 @@ static void check_vk_result(VkResult err)
 {
     if (err == 0)
         return;
-    SDL_Log("[vulkan][%s:%d] Error: VkResult = %d", __FILE_NAME__, __LINE__, err);
+    SDL_Log("[vulkan][%s:%d] Error: VkResult = %d", __FILE__, __LINE__, err);
     if (err < 0)
         panic();
 }

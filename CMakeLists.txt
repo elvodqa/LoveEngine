@@ -46,6 +46,7 @@ add_executable(LoveEngine
 
         external/imgui/misc/freetype/imgui_freetype.cpp
         love_resource_locator.h
+        Renderer/ResourceManager.cpp
 )
 
 if (TARGET freetype)
@@ -86,6 +87,7 @@ if (TARGET glm::glm-header-only)
     target_link_libraries(LoveEngine PRIVATE glm::glm-header-only)
     target_include_directories(LoveEngine PRIVATE external/glm/include)
 endif()
+
 find_package(Vulkan REQUIRED)
 
 if (VULKAN_FOUND)
@@ -110,3 +112,4 @@ target_include_directories(LoveEngine PRIVATE external/stb)
 if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
     # target_link_libraries(VKEngine PRIVATE Vulkan::MoltenVK) error?
 endif()
+target_include_directories(LoveEngine PRIVATE external/stb)

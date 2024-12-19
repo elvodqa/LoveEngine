@@ -10,6 +10,8 @@
 #include "volk.h"
 #include <filesystem>
 #include <string.h>
+#include <vector>
+
 #include "../Renderer/Renderer.h"
 #include "../debug_panic.h"
 

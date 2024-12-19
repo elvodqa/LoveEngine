@@ -3,7 +3,7 @@
 
 
 [[noreturn]] inline extern void panic() {
-    *(int *)nullptr = 0xf;
+    *(volatile int *)nullptr = 0xf;
     exit(-1);
 }
 #endif //DEBUG_PANIC_H
