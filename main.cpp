@@ -13,6 +13,8 @@
 //   the backend itself (imgui_impl_vulkan.cpp), but should PROBABLY NOT be used by your own engine/app code.
 // Read comments in imgui_impl_vulkan.h.
 //#define VK_USE_PLATFORM_WIN32_KHR
+#define STB_IMAGE_IMPLEMENTATION
+
 #define IMGUI_IMPL_VULKAN_USE_VOLK
 #define IMGUI_IMPL_VULKAN_HAS_DYNAMIC_RENDERING
 #define VOLK_IMPLEMENTATION
@@ -44,6 +46,7 @@
 #include "editor/editor.hpp"
 #include "Renderer/Renderer.h"
 #include "Renderer/ResourceManager.h"
+
 
 static love::Editor* editor;
 
@@ -212,6 +215,12 @@ int main(int, char**)
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
     editor = new love::Editor(renderer::window);
+    editor->log(love::editor::LogType::Trace, "I'm a trace message");
+    editor->log(love::editor::LogType::Warn, "I'm a warning!! message");
+    editor->log(love::editor::LogType::Info, "I'm informing you");
+    editor->log(love::editor::LogType::Error, "THIS PROGRAM IS BLOWING UP ERROR");
+    editor->log(love::editor::LogType::Debug, "Debugging started");
+
     int fr=0;
     // Main loop
     bool done = false;
@@ -226,10 +235,12 @@ int main(int, char**)
         while (SDL_PollEvent(&event))
         {
             ImGui_ImplSDL3_ProcessEvent(&event);
+            editor->check_events(&event);
             if (event.type == SDL_EVENT_QUIT)
                 done = true;
             if (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED && event.window.windowID == SDL_GetWindowID(renderer::window))
                 done = true;
+
         }
         if (SDL_GetWindowFlags(renderer::window) & SDL_WINDOW_MINIMIZED)
         {
@@ -253,43 +264,6 @@ int main(int, char**)
         ImGui_ImplVulkan_NewFrame();
         ImGui_ImplSDL3_NewFrame();
         ImGui::NewFrame();
-        /*
-        // 1. Show the big demo window (Most of the sample code is in ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
-        if (show_demo_window)
-            ImGui::ShowDemoWindow(&show_demo_window);
-
-        // 2. Show a simple window that we create ourselves. We use a Begin/End pair to create a named window.
-        {
-            static float f = 0.0f;
-            static int counter = 0;
-
-            ImGui::Begin("Hello, world!");                          // Create a window called "Hello, world!" and append into it.
-
-            ImGui::Text("This is some useful text.");               // Display some text (you can use a format strings too)
-            ImGui::Checkbox("Demo Window", &show_demo_window);      // Edit bools storing our window open/close state
-            ImGui::Checkbox("Another Window", &show_another_window);
-
-            ImGui::SliderFloat("float", &f, 0.0f, 1.0f);            // Edit 1 float using a slider from 0.0f to 1.0f
-            ImGui::ColorEdit3("clear color", (float*)&clear_color); // Edit 3 floats representing a color
-
-            if (ImGui::Button("Button"))                            // Buttons return true when clicked (most widgets return true when edited/activated)
-                counter++;
-            ImGui::SameLine();
-            ImGui::Text("counter = %d", counter);
-
-            ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
-            ImGui::End();
-        }
-
-        // 3. Show another simple window.
-        if (show_another_window)
-        {
-            ImGui::Begin("Another Window", &show_another_window);   // Pass a pointer to our bool variable (the window will have a closing button that will clear the bool when clicked)
-            ImGui::Text("Hello from another window!");
-            if (ImGui::Button("Close Me"))
-                show_another_window = false;
-            ImGui::End();
-        } */
 
         editor->draw(done);
 

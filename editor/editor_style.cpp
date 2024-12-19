@@ -554,8 +554,11 @@ void love::Editor::changeTheme(love::editor::Theme theme) {
         case editor::Theme::PurpleComfy:
             SetupImGuiStyle_PurpleComfy();
             break;
+        case editor::Theme::Default:
+            ImGui::GetStyle() = ImGuiStyle();
+            break;
         default:
-            SetupImGuiStyle_EverForest();
+            ImGui::GetStyle() = ImGuiStyle();
             break;
     }
 }
@@ -580,6 +583,6 @@ void love::Editor::SetupImGuiStyle(love::editor::Theme theme)
     // TODO: FIX SCALE
 #endif
 
-    changeTheme(editor::Theme::GoldSource);
+    changeTheme(theme);
 
 }

@@ -105,6 +105,8 @@ elseif (UNIX)
     target_compile_definitions(LoveEngine PRIVATE VK_USE_PLATFORM_XLIB_KHR)
 endif()
 
+target_include_directories(LoveEngine PRIVATE external/stb)
+
 if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
     # target_link_libraries(VKEngine PRIVATE Vulkan::MoltenVK) error?
 endif()

@@ -5,7 +5,6 @@
 #include "EngineImage.h"
 #include <volk.h>
 #include <bit>
-#define STB_IMAGE_IMPLEMENTATION
 #include "../external/stb/stb_image.h"
 #include "../love_resource_locator.h"
 #include "../debug_panic.h"
