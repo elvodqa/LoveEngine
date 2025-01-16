@@ -7,6 +7,7 @@
 #include <SDL3/SDL_vulkan.h>
 #include <vk_mem_alloc.h>
 
+#include "ResourceManager.h"
 #include "../debug_panic.h"
 #ifdef _DEBUG
 #define APP_USE_VULKAN_DEBUG_REPORT
@@ -16,15 +17,23 @@ namespace renderer {
     static void SetupVulkanWindow(ImGui_ImplVulkanH_Window* wd, VkSurfaceKHR surface, int width, int height);
     static void vma_init();
 #ifdef APP_USE_VULKAN_DEBUG_REPORT
+
     static VKAPI_ATTR VkBool32 VKAPI_CALL debug_report(VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT objectType, uint64_t object, size_t location, int32_t messageCode, const char* pLayerPrefix, const char* pMessage, void* pUserData)
     {
         (void)flags; (void)object; (void)location; (void)messageCode; (void)pUserData; (void)pLayerPrefix; // Unused arguments
         SDL_Log("[vulkan] Debug report from ObjectType: %i\nMessage: %s\n\n", objectType, pMessage);
-         if(flags&(VK_DEBUG_REPORT_WARNING_BIT_EXT|VK_DEBUG_REPORT_ERROR_BIT_EXT|VK_DEBUG_REPORT_DEBUG_BIT_EXT)) {
-             __nop();//for breakpoint
+         if(flags&(VK_DEBUG_REPORT_WARNING_BIT_EXT|VK_DEBUG_REPORT_ERROR_BIT_EXT|VK_DEBUG_REPORT_DEBUG_BIT_EXT)
+
+         &&!strstr(pMessage,"| vkCreateDevice():  Internal Warning:")
+         &&!strstr(pMessage,"Access info (prior_usage: SYNC_PRESENT_ENGINE_SYNCVAL_PRESENT_ACQUIRE_READ_SYNCVAL")//TODO actually fix
+         ) {
+             __asm__("nop");//for breakpoint
          }
-        if (flags&VK_DEBUG_REPORT_ERROR_BIT_EXT){
-            __nop();//for breakpoint
+        if (flags&VK_DEBUG_REPORT_ERROR_BIT_EXT
+        &&!strstr(pMessage,"Access info (prior_usage: SYNC_PRESENT_ENGINE_SYNCVAL_PRESENT_ACQUIRE_READ_SYNCVAL")//TODO actually fix
+
+        ){
+             __asm__("nop");//for breakpoint
             }
         return VK_FALSE;
     }
@@ -77,6 +86,7 @@ void init() {
     SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
     SDL_ShowWindow(window);
 
+    init_frame_resource_manager();
 }
 static void check_vk_result(VkResult err)
 {
@@ -132,10 +142,12 @@ void SetupVulkan(ImVector<const char*> instance_extensions)
 
     // Create Vulkan Instance
     {
-        VkApplicationInfo app_info = {VK_STRUCTURE_TYPE_APPLICATION_INFO, nullptr,"Love",1,"Love",1,VK_API_VERSION_1_2};
+        VkApplicationInfo app_info = {VK_STRUCTURE_TYPE_APPLICATION_INFO, nullptr,"Love",1,"Love",1,VK_API_VERSION_1_3};
         VkInstanceCreateInfo create_info={};
         create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
         create_info.pApplicationInfo = &app_info;
+
+
 
         // Enumerate available extensions
         uint32_t properties_count;
@@ -216,6 +228,9 @@ void SetupVulkan(ImVector<const char*> instance_extensions)
         device_extensions.push_back("VK_KHR_create_renderpass2");
         device_extensions.push_back("VK_EXT_descriptor_indexing");
         device_extensions.push_back("VK_KHR_buffer_device_address");
+        device_extensions.push_back("VK_KHR_maintenance5");
+        device_extensions.push_back("VK_EXT_graphics_pipeline_library");
+        device_extensions.push_back("VK_KHR_pipeline_library");
         // device_extensions.push_back("VK_EXT_swapchain_maintenance1");
         // device_extensions.push_back("VK_EXT_surface_maintenance1");
 
@@ -242,6 +257,34 @@ void SetupVulkan(ImVector<const char*> instance_extensions)
         create_info.pQueueCreateInfos = queue_info;
         create_info.enabledExtensionCount = (uint32_t)device_extensions.Size;
         create_info.ppEnabledExtensionNames = device_extensions.Data;
+        VkPhysicalDeviceDynamicRenderingFeaturesKHR dynamic_rendering_feature {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES_KHR,
+            .dynamicRendering = VK_TRUE,
+            .pNext=(void*)create_info.pNext,
+        };
+        create_info.pNext = &dynamic_rendering_feature;
+        VkPhysicalDeviceDescriptorIndexingFeatures descriptor_indexing_feature{
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES,
+            .descriptorBindingUpdateUnusedWhilePending = VK_TRUE,
+            .descriptorBindingPartiallyBound = VK_TRUE,
+            .descriptorBindingVariableDescriptorCount = VK_TRUE,
+            .pNext=(void*)create_info.pNext,
+        };
+        create_info.pNext = &descriptor_indexing_feature;
+        VkPhysicalDeviceMaintenance5FeaturesKHR maintenance5_feature {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_5_FEATURES_KHR,
+            .maintenance5 = VK_TRUE,
+            .pNext=(void*)create_info.pNext,
+        };
+        create_info.pNext = &maintenance5_feature;
+        VkPhysicalDeviceGraphicsPipelineLibraryFeaturesEXT graphics_pipeline_library_features {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GRAPHICS_PIPELINE_LIBRARY_FEATURES_EXT,
+            .graphicsPipelineLibrary = VK_TRUE,
+            .pNext=(void*)create_info.pNext,
+        };
+        create_info.pNext = &graphics_pipeline_library_features;
+
+
         err = vkCreateDevice(g_PhysicalDevice, &create_info, g_vk_Allocator, &device);
         check_vk_result(err);
         vkGetDeviceQueue(device, g_QueueFamily, 0, &g_Queue);
@@ -339,10 +382,10 @@ static void vma_init() {
     vma_vulkan_func.vkUnmapMemory                           = vkUnmapMemory;
     vma_vulkan_func.vkCmdCopyBuffer                         = vkCmdCopyBuffer;
     vma_vulkan_func.vkGetBufferMemoryRequirements2KHR       = vkGetBufferMemoryRequirements2;
-    vma_vulkan_func.vkGetImageMemoryRequirements2KHR        = vkGetImageMemoryRequirements2KHR;
+    vma_vulkan_func.vkGetImageMemoryRequirements2KHR        = vkGetImageMemoryRequirements2;
     vma_vulkan_func.vkBindBufferMemory2KHR                  = vkBindBufferMemory2KHR;
     vma_vulkan_func.vkBindImageMemory2KHR                   = vkBindImageMemory2KHR;
-    vma_vulkan_func.vkGetPhysicalDeviceMemoryProperties2KHR = vkGetPhysicalDeviceMemoryProperties2KHR;
+    vma_vulkan_func.vkGetPhysicalDeviceMemoryProperties2KHR = vkGetPhysicalDeviceMemoryProperties2;
     vma_vulkan_func.vkBindImageMemory2KHR                   = vkBindImageMemory2KHR;
     vma_vulkan_func.vkBindImageMemory2KHR                   = vkBindImageMemory2KHR;
 

@@ -47,6 +47,16 @@ add_executable(LoveEngine
         external/imgui/misc/freetype/imgui_freetype.cpp
         love_resource_locator.h
         Renderer/ResourceManager.cpp
+        Renderer/ImageManager.cpp
+        Renderer/ImageManager.h
+        Renderer/MeshManager.cpp
+        Renderer/MeshManager.h
+        Renderer/EngineBuffer.cpp
+        Renderer/EngineBuffer.h
+        Renderer/first_renderer.cpp
+        Renderer/first_renderer.h
+        Renderer/ShaderManager.cpp
+        Renderer/ShaderManager.h
 )
 
 if (TARGET freetype)
@@ -106,10 +116,11 @@ elseif (APPLE)
 elseif (UNIX)
     target_compile_definitions(LoveEngine PRIVATE VK_USE_PLATFORM_XLIB_KHR)
 endif()
-
+if (TARGET LoveEngine)
+    add_compile_definitions(_DEBUG)
+endif ()
 target_include_directories(LoveEngine PRIVATE external/stb)
 
 if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
     # target_link_libraries(VKEngine PRIVATE Vulkan::MoltenVK) error?
 endif()
-target_include_directories(LoveEngine PRIVATE external/stb)

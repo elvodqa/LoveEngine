@@ -268,8 +268,11 @@ void love::Editor::check_events(const SDL_Event* event) {
 }
 
 void love::Editor::draw(bool& done) {
+    ImGui::PushStyleColor(ImGuiCol_DockingEmptyBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
     ImGui::DockSpaceOverViewport();
-
+    ImGui::PopStyleColor();
+    ImGui::PopStyleColor();
     if (ImGui::BeginMainMenuBar()) {
         if (ImGui::BeginMenu("File"))
         {
@@ -334,6 +337,8 @@ void love::Editor::draw(bool& done) {
 
     b_eventFileDropped = false;
     c_eventFileDroppedName = nullptr;
+
+
 }
 
 void love::Editor::ShowAssetBrowser(bool *p_open) {
@@ -361,7 +366,7 @@ void love::Editor::ShowAssetBrowser(bool *p_open) {
                 if (!LoadTextureFromFile(c_eventFileDroppedName, &imageAsset.data)) {
                     SDL_Log("Error loading file image");
                 }
-                imageAsset.name = fs::path(c_eventFileDroppedName).filename();
+                imageAsset.name = fs::path(c_eventFileDroppedName).filename().string();
                 assetsImage.push_back(imageAsset);
                 SDL_Log("Added image to assets");
             }
@@ -448,7 +453,7 @@ void love::Editor::showExplorer(bool *p_open) {
             if (part.filename() == "") {
                 continue;
             }
-            if (ImGui::Button(part.c_str())) {
+            if (ImGui::Button(reinterpret_cast<const char *>(part.c_str()))) {
                 if (part.filename() != currentPath.filename()) {
                     auto pos = currentPath.string().find(part.string());
                     if (pos != std::string::npos) {
@@ -465,6 +470,7 @@ void love::Editor::showExplorer(bool *p_open) {
         if (ImGui::InputText("Path", c_explorerSearchBuffer, 1024, ImGuiInputTextFlags_EnterReturnsTrue)) {
             SDL_Log("%s", c_explorerSearchBuffer);
             auto path = fs::path(c_explorerSearchBuffer);
+
             if (exists(path)) {
                 currentPath = path;
                 b_explorerSearchInputing = false;
@@ -555,7 +561,7 @@ void love::Editor::showExplorer(bool *p_open) {
                     auto filename = item.filename().string();
                     ImGui::BeginGroup();
 
-                    std::string extension = item.extension();
+                    auto extension = item.extension();
 
                     std::string logo;
                     if (extension == ".lua" || extension == ".cs" || extension == ".odin" || extension == ".txt" || extension == ".md" ) {

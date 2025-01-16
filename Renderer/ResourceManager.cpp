@@ -1,6 +1,6 @@
 #include "ResourceManager.h"
 
-void default_cleanup(){}
+static void default_cleanup(){}
 void deferffl(std::function<void()> &&fn) {
     cleanups[currentFrame%MAX_INFLIGHT_FRAMES].push_back(std::move(fn));
 }
@@ -31,4 +31,13 @@ void init_frame_resource_manager() {
     };
     for (auto & commandPool : commandPools)
         vkCreateCommandPool(renderer::device, &pool_info, renderer::g_vk_Allocator, &commandPool);
+}
+
+void set_dirty_range(EngineBuffer& buf, uint32_t offset, uint32_t size) {
+    buf.dirty_offset=offset;
+    buf.dirty_size=size;
+}
+
+int get_frame_no() {
+    return  currentFrame;
 }
