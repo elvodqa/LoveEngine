@@ -12,7 +12,7 @@ layout(location = 0) out vec2 fragUV;    // Pass UV to fragment shader
 
 void main() {
     // Transform the position using the model and view-projection matrices
-    gl_Position = pushConstants.viewProj * pushConstants.model * vec4(inPosition, 1.0);
+    gl_Position = (pushConstants.viewProj * pushConstants.model) * vec4(inPosition, 1.f);
 
     // Pass the UV coordinates to the fragment shader
     fragUV = inUV;

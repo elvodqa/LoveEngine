@@ -1,5 +1,14 @@
 #include "editor.hpp"
 
+#include <entt/entt.hpp>
+#include <entt/entity/registry.hpp>
+
+#include "../love.h"
+#include "../ECS/Camera.h"
+#include "../ECS/EditorSelected.h"
+#include "InpectorRepr.h"
+#include "../ECS/Transform.h"
+
 namespace fs = std::filesystem;
 
 
@@ -7,9 +16,8 @@ static void check_vk_result(VkResult err)
 {
     if (err == 0)
         return;
-    SDL_Log("[vulkan][%s:%d] Error: VkResult = %d", __FILE__, __LINE__, err);
-    if (err < 0)
-        panic();
+    panic("[vulkan][%s:%d] Error: VkResult = %d", __FILE__, __LINE__, (int)err);
+
 }
 
 // Helper function to find Vulkan memory type bits. See ImGui_ImplVulkan_MemoryType() in imgui_impl_vulkan.cpp
@@ -231,6 +239,28 @@ void RemoveTexture(MyTextureData* tex_data)
     ImGui_ImplVulkan_RemoveTexture(tex_data->DS);
 }
 
+void inspectorcam(Camera* cam) {
+    if (ImGui::TreeNode("Camera")) {
+        ImGui::SliderAngle("Fov",&cam->fovy,1,180);
+        ImGui::DragFloat("Near Clip Plane",&cam->nearPlane, 0.01, 0.00001,1,"%.5f",ImGuiSliderFlags_Logarithmic|ImGuiSliderFlags_NoRoundToFormat);
+        ImGui::DragFloat("Far Clip Plane",&cam->farPlane,1 ,1,10000,"%.5f",ImGuiSliderFlags_Logarithmic|ImGuiSliderFlags_NoRoundToFormat);
+        ImGui::TreePop();
+    }
+}
+void inspectortransform(Transform* tr) {
+    if (ImGui::TreeNode("Transform")) {
+        ImGui::InputFloat3("position",(float*)&tr->translation);
+        glm::vec3 rotEuler = glm::eulerAngles(tr->rotation);
+        if (ImGui::InputFloat3("rotation",(float*)&rotEuler))
+            tr->rotation = glm::quat(rotEuler);
+        ImGui::InputFloat3("scale",(float*)&tr->scale);
+        ImGui::TreePop();
+    }
+}
+void love::editor::editor_init() {
+    typeCB[entt::type_hash<Transform>{}.value()]=(void (*)(void*))&inspectortransform;
+    typeCB[entt::type_hash<Camera>{}.value()]=(void (*)(void*))&inspectorcam;
+}
 
 love::Editor::Editor(SDL_Window* window) {
     SetupImGuiStyle(editor::Theme::Default);
@@ -338,6 +368,11 @@ void love::Editor::draw(bool& done) {
     b_eventFileDropped = false;
     c_eventFileDroppedName = nullptr;
 
+    {// show inspector
+        showInspectorHierarchy();
+        showInspectorEditor();
+        showGameWindow();
+    }
 
 }
 
@@ -564,7 +599,7 @@ void love::Editor::showExplorer(bool *p_open) {
                     auto extension = item.extension();
 
                     std::string logo;
-                    if (extension == ".lua" || extension == ".cs" || extension == ".odin" || extension == ".txt" || extension == ".md" ) {
+                    if (extension == ".lua" ||extension == ".c" ||extension == ".h" ||extension == ".hpp" ||extension == ".cpp" || extension == ".cs" || extension == ".odin" || extension == ".txt" || extension == ".md" ) {
                         logo = ICON_FA_FILE_CODE;
                     }
                     else if (extension == ".mp3" || extension == ".wav" || extension == ".ogg") {
@@ -675,7 +710,130 @@ void love::Editor::showConsole(bool *p_open) {
 
     ImGui::End();
 }
+// Helper trait to extract component type from different storage types
+template<typename T>
+struct ExtractComponentType {
+    using type = void;  // Default case for unknown types
+};
 
+// Specialization for entt::basic_storage (direct component storage)
+template<typename ComponentType, typename EntityType, typename Allocator, typename VoidType>
+struct ExtractComponentType<entt::basic_storage<ComponentType, EntityType, Allocator, VoidType>> {
+    using type = ComponentType;
+};
+
+// // Specialization for entt::basic_sparse_set (another possible storage type)
+// template<typename EntityType>
+// struct ExtractComponentType<entt::basic_sparse_set<EntityType>> {
+//     using type = EntityType;  // or some other deduced component type
+// };
+void love::Editor::showInspectorHierarchy() {
+    ImGui::Begin("Inspector");
+    ImGui::Text("Inspector");
+    // Storing items data separately from selection data.
+    // (you may decide to store selection data inside your item (aka intrusive storage) if you don't need multiple views over same items)
+    // Use a custom selection.Adapter: store item identifier in Selection (instead of index)
+
+    ImGui::Text("Added features:");
+    ImGui::BulletText("Dynamic list with Delete key support.");
+
+    // Initialize default list with 50 items + button to add/remove items.
+
+    auto v=::love::registry.view<entt::entity>();
+    char buf[64];
+    for (auto e : v) {
+        snprintf(buf,64,"entity %d",e);
+        bool selected = love::registry.any_of<EditorSelected>(e);
+        if(ImGui::Selectable(buf,selected)) {
+            if (selected) {
+                love::registry.remove<EditorSelected>(e);
+            }
+            else {
+                love::registry.emplace<EditorSelected>(e);
+            }
+        }
+    }
+
+    // (1) Extra to support deletion: Submit scrolling range to avoid glitches on deletion
+    // const float items_height = ImGui::GetTextLineHeightWithSpacing();
+    // ImGui::SetNextWindowContentSize(ImVec2(0.0f, 20 * items_height));
+    //
+    // if (ImGui::BeginChild("##Basket", ImVec2(-FLT_MIN, ImGui::GetFontSize() * 20), ImGuiChildFlags_FrameStyle | ImGuiChildFlags_ResizeY))
+    // {
+    //     ImGuiMultiSelectFlags flags = ImGuiMultiSelectFlags_ClearOnEscape | ImGuiMultiSelectFlags_BoxSelect1d;
+    //     ImGuiMultiSelectIO* ms_io = ImGui::BeginMultiSelect(flags, selection.Size, items.Size);
+    //     selection.ApplyRequests(ms_io);
+    //
+    //     const bool want_delete = ImGui::Shortcut(ImGuiKey_Delete, ImGuiInputFlags_Repeat) && (selection.Size > 0);
+    //     const int item_curr_idx_to_focus = want_delete ? selection.ApplyDeletionPreLoop(ms_io, items.Size) : -1;
+    //
+    //     for (int n = 0; n < items.Size; n++)
+    //     {
+    //         const ImGuiID item_id = items[n];
+    //         char label[64];
+    //         sprintf(label, "Object %05u: ", item_id);
+    //
+    //         bool item_is_selected = selection.Contains(item_id);
+    //         ImGui::SetNextItemSelectionUserData(n);
+    //         ImGui::Selectable(label, item_is_selected);
+    //         if (item_curr_idx_to_focus == n)
+    //             ImGui::SetKeyboardFocusHere(-1);
+    //     }
+    //
+    //     // Apply multi-select requests
+    //     ms_io = ImGui::EndMultiSelect();
+    //     selection.ApplyRequests(ms_io);
+    //     if (want_delete)
+    //         selection.ApplyDeletionPostLoop(ms_io, items, item_curr_idx_to_focus);
+    // }
+    // ImGui::EndChild();
+    ImGui::End();
+    }
+
+void love::Editor::showGameWindow() {
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+    if (ImGui::Begin("game", nullptr, ImGuiWindowFlags_NoBackground|ImGuiWindowFlags_NoCollapse)) {
+        ImGui::GetContentRegionAvail();
+        ImVec2 vMin = ImGui::GetWindowContentRegionMin();
+        ImVec2 vMax = ImGui::GetWindowContentRegionMax();
+
+        vMin.x += ImGui::GetWindowPos().x;
+        vMin.y += ImGui::GetWindowPos().y;
+        vMax.x += ImGui::GetWindowPos().x;
+        vMax.y += ImGui::GetWindowPos().y;
+        love::editor::wxmx=vMax.x;
+        love::editor::wymx=vMax.y;
+        love::editor::wxmn=vMin.x;
+        love::editor::wymn=vMin.y;
+        ImGui::GetForegroundDrawList()->AddRect( vMin, vMax, IM_COL32( 255, 255, 0, 255 ) );
+    }
+    else {
+        love::editor::wxmx=-1;
+        love::editor::wymx=-1;
+        love::editor::wxmn=-1;
+        love::editor::wymn=-1;
+    }
+    ImGui::PopStyleVar();
+    ImGui::End();
+
+}
+
+void love::Editor::showInspectorEditor() {
+    bool a = false;
+    if (ImGui::Begin("I-Editor")) {
+        love::registry.view<EditorSelected>().each([&](auto e) {
+            for (auto&& [_, storage] : registry.storage()) {
+                // Check if the entity exists in the current storage
+                if (storage.contains(e)) {
+                    auto mapped = editor::typeCB[storage.type().hash()];
+                    if (mapped)mapped(storage.value(e));
+                    else __asm__("nop");
+                }
+            }
+        });
+    }
+    ImGui::End();
+}
 void love::Editor::log(love::editor::LogType type, std::string msg) {
     love::editor::LogItem item;
     item.message = std::string(msg);

@@ -51,8 +51,7 @@ void init() {
     renderer::window = SDL_CreateWindow("LoveVK", 1280, 720, window_flags);
     if (window == nullptr)
     {
-        SDL_Log("Error: SDL_CreateWindow(): %s\n", SDL_GetError());
-        panic();
+        panic("Error: SDL_CreateWindow(): %s\n", SDL_GetError());
     }
 
     ImVector<const char*> extensions;
@@ -74,8 +73,7 @@ void init() {
     VkResult err;
     if (SDL_Vulkan_CreateSurface(window, vk_Instance, g_vk_Allocator, &surface) == 0)
     {
-        SDL_Log("Failed to create Vulkan surface.\n");
-        panic();
+        panic("Failed to create Vulkan surface.\n");
     }
 
     // Create Framebuffers
@@ -92,9 +90,7 @@ static void check_vk_result(VkResult err)
 {
     if (err == 0)
         return;
-    SDL_Log("[vulkan] Error: VkResult = %d", err);
-    if (err < 0)
-        panic();
+    panic("[vulkan] Error: VkResult = %d", (int)err);
 }
 static bool IsExtensionAvailable(const ImVector<VkExtensionProperties>& properties, const char* extension)
 {
@@ -228,7 +224,8 @@ void SetupVulkan(ImVector<const char*> instance_extensions)
         device_extensions.push_back("VK_KHR_create_renderpass2");
         device_extensions.push_back("VK_EXT_descriptor_indexing");
         device_extensions.push_back("VK_KHR_buffer_device_address");
-        device_extensions.push_back("VK_KHR_maintenance5");
+        // DISABLED DUE TO RENDERDOC BUG
+        // device_extensions.push_back("VK_KHR_maintenance5");
         device_extensions.push_back("VK_EXT_graphics_pipeline_library");
         device_extensions.push_back("VK_KHR_pipeline_library");
         // device_extensions.push_back("VK_EXT_swapchain_maintenance1");
@@ -271,19 +268,25 @@ void SetupVulkan(ImVector<const char*> instance_extensions)
             .pNext=(void*)create_info.pNext,
         };
         create_info.pNext = &descriptor_indexing_feature;
-        VkPhysicalDeviceMaintenance5FeaturesKHR maintenance5_feature {
-            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_5_FEATURES_KHR,
-            .maintenance5 = VK_TRUE,
-            .pNext=(void*)create_info.pNext,
-        };
-        create_info.pNext = &maintenance5_feature;
+        // DISABLED DUE TO RENDERDOC BUG
+        // VkPhysicalDeviceMaintenance5FeaturesKHR maintenance5_feature {
+        //     .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_5_FEATURES_KHR,
+        //     .maintenance5 = VK_TRUE,
+        //     .pNext=(void*)create_info.pNext,
+        // };
+        // create_info.pNext = &maintenance5_feature;
         VkPhysicalDeviceGraphicsPipelineLibraryFeaturesEXT graphics_pipeline_library_features {
             .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GRAPHICS_PIPELINE_LIBRARY_FEATURES_EXT,
             .graphicsPipelineLibrary = VK_TRUE,
             .pNext=(void*)create_info.pNext,
         };
         create_info.pNext = &graphics_pipeline_library_features;
-
+        VkPhysicalDeviceBufferDeviceAddressFeatures buffer_device_address_features {
+            .sType =  VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES,
+            .bufferDeviceAddress = VK_TRUE,
+            .pNext=(void*)create_info.pNext,
+        };
+        create_info.pNext = &buffer_device_address_features;
 
         err = vkCreateDevice(g_PhysicalDevice, &create_info, g_vk_Allocator, &device);
         check_vk_result(err);
@@ -320,8 +323,7 @@ static void SetupVulkanWindow(ImGui_ImplVulkanH_Window* wd, VkSurfaceKHR surface
     vkGetPhysicalDeviceSurfaceSupportKHR(g_PhysicalDevice, g_QueueFamily, wd->Surface, &res);
     if (res != VK_TRUE)
     {
-        SDL_Log("Error no WSI support on physical device 0");
-        panic();
+        panic("Error no WSI support on physical device 0");
     }
 
     // Select Surface Format

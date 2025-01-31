@@ -22,6 +22,8 @@ namespace renderer {
     inline VkPipelineCache          g_PipelineCache = VK_NULL_HANDLE;
     inline VkDescriptorPool         imgui_DescriptorPool = VK_NULL_HANDLE;
 
+    inline VkFence                  thread0_load_fence = VK_NULL_HANDLE;
+
     inline uint32_t                 g_MinImageCount = 2;
     inline bool                     g_SwapChainRebuild = false;
 

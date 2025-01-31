@@ -9,6 +9,7 @@
 
 EngineBuffer *EngineBuffer::init(uint32_t size, VkBufferUsageFlags usage, const VmaAllocationCreateInfo &allocinfo) {
     auto buffer = new EngineBuffer();
+    usage |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT;
     buffer->buffer_create_info={
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
         .size = size,
@@ -36,13 +37,15 @@ void EngineBuffer::grow_exact(VkCommandBuffer cb, uint32_t new_cap) {
 
     vmaCreateBuffer(renderer::vma_allocator,&buffer_create_info,&alloc_create_info,&buffer,&allocation,&allocation_info);
 
-    VkBufferCopy copy={
-        .srcOffset = 0,
-        .size = size,
-        .dstOffset = 0,
-    };
-    vkCmdCopyBuffer(cb,old_buf,buffer,1,&copy);
-    last_used_access=VK_ACCESS_TRANSFER_WRITE_BIT;
-    last_used_stage=VK_PIPELINE_STAGE_TRANSFER_BIT;
+    if (size!=0){
+        VkBufferCopy copy={
+            .srcOffset = 0,
+            .size = size,
+            .dstOffset = 0,
+        };
+        vkCmdCopyBuffer(cb,old_buf,buffer,1,&copy);
+        last_used_access=VK_ACCESS_TRANSFER_WRITE_BIT;
+        last_used_stage=VK_PIPELINE_STAGE_TRANSFER_BIT;
+    }
     capacity=new_cap;
 }

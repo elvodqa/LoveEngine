@@ -10,6 +10,7 @@
 #include "volk.h"
 #include <filesystem>
 #include <string.h>
+#include <unordered_map>
 #include <vector>
 
 #include "../Renderer/Renderer.h"
@@ -73,6 +74,13 @@ namespace love {
             std::string message;
             love::editor::LogType type;
         };
+        inline std::unordered_map<uint32_t, void(*)(void*)> typeCB;
+        void editor_init();
+
+        inline float wxmx=-1;
+        inline float wymx=-1;
+        inline float wxmn=-1;
+        inline float wymn=-1;
     }
 
 
@@ -81,6 +89,7 @@ namespace love {
         Editor(SDL_Window *window);
 
         ~Editor();
+
 
 
         void draw(bool& done);
@@ -121,9 +130,9 @@ namespace love {
         void showExplorer(bool *p_open);
         void ShowAssetBrowser(bool *p_open);
         void showConsole(bool *p_open);
-
-
-
+        void showInspectorHierarchy();
+        void showGameWindow();
+        void showInspectorEditor();
     };
 }
 

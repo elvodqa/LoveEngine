@@ -21,6 +21,9 @@ EngineImage * EngineImage::createImage_unallocated(uint32_t width, uint32_t heig
     image->format = format;
     image->mipcount = mipcount;
     image->imageLayout.resize(mipcount);
+    image->width = width;
+    image->height = height;
+
     std::fill(image->imageLayout.begin(), image->imageLayout.end(), VK_IMAGE_LAYOUT_UNDEFINED);
     VkImageCreateInfo info = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
@@ -66,6 +69,8 @@ EngineImage *EngineImage::createImage(uint32_t width, uint32_t height, VkFormat 
     image->format = format;
     image->mipcount = mipcount;
     image->imageLayout.resize(mipcount);
+    image->width = width;
+    image->height = height;
     std::fill(image->imageLayout.begin(), image->imageLayout.end(), VK_IMAGE_LAYOUT_UNDEFINED);
     VkImageCreateInfo info = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
@@ -100,7 +105,21 @@ EngineImage *EngineImage::createImage(uint32_t width, uint32_t height, VkFormat 
     vkCreateImageView(renderer::device,&viewInfo,renderer::g_vk_Allocator,&image->imageView);
     return  image;
 }
-
+constexpr VkImageAspectFlags aspect_from_format(VkFormat format) {
+    switch (format) {
+        case VK_FORMAT_D16_UNORM:
+        case VK_FORMAT_D32_SFLOAT:
+        case VK_FORMAT_D16_UNORM_S8_UINT:
+        case VK_FORMAT_D24_UNORM_S8_UINT:
+        case VK_FORMAT_D32_SFLOAT_S8_UINT:
+            return VK_IMAGE_ASPECT_DEPTH_BIT;
+        case VK_FORMAT_UNDEFINED:
+        case VK_FORMAT_MAX_ENUM:
+            panic("VK_FORMAT_UNDEFINED");
+       default:
+           return VK_IMAGE_ASPECT_COLOR_BIT;
+    }
+}
 VkImageView EngineImage::createAdditionalImageView(EngineImage &image) {
     VkImageViewCreateInfo viewInfo = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
@@ -108,7 +127,7 @@ VkImageView EngineImage::createAdditionalImageView(EngineImage &image) {
         .format = image.format,
         .image = image,
         .subresourceRange = VkImageSubresourceRange{
-            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .aspectMask = aspect_from_format(image.format),
             .baseMipLevel = 0,
             .levelCount = image.mipcount,
             .layerCount = 1,
@@ -121,57 +140,64 @@ VkImageView EngineImage::createAdditionalImageView(EngineImage &image) {
     return out;
 }
 
-EngineImage* EngineImage::make(VkCommandBuffer cb, ResourceLocator image_source, VkImageUsageFlags usage,bool generate_mips) {
-    uint32_t width, height, channels;
-    usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-    stbi_info(image_source.path, (int*)&width, (int*)&height, (int*)&channels);
-
-
-    auto format   = channels==4?VK_FORMAT_R8G8B8A8_SRGB:
-                    channels==3?VK_FORMAT_R8G8B8_SRGB:
-                    channels==2?VK_FORMAT_R8G8_SRGB:
-                                VK_FORMAT_R8G8B8_SRGB;
-    VmaAllocationCreateInfo vmaInfo = {
-        .usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
-    };
-    auto* image= createImage(width, height, format, usage, vmaInfo, generate_mips);
-
-
-    uint8_t* lmem = stbi_load(image_source.path, (int*)&width, (int*)&height, (int*)&channels,15);
-
-    VkBuffer local_tmp;
-    VmaAllocation local_tmp_alloc;
-    VmaAllocationInfo tmp_info;
-    vmaInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
-    vmaInfo.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT|VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
-    vmaInfo.requiredFlags = VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
-    VkBufferCreateInfo buffer_info = {
-        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-        .flags = 0,
-        .size = width*height*channels,
-        .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-        .queueFamilyIndexCount = 1,
-        .pQueueFamilyIndices = &renderer::g_QueueFamily,
-    };
-    vmaCreateBuffer(renderer::vma_allocator,&buffer_info,&vmaInfo,&local_tmp,&local_tmp_alloc,&tmp_info);
-    deferffl([local_tmp, local_tmp_alloc]{vmaDestroyBuffer(renderer::vma_allocator,local_tmp,local_tmp_alloc);});
-    memcpy(tmp_info.pMappedData,lmem,1/*8 bit srgb*/*width*height*channels);
-    vmaFlushAllocation(renderer::vma_allocator,local_tmp_alloc,tmp_info.offset,tmp_info.size);
-    stbi_image_free(lmem);
-    image->ChangeImageLayout(cb,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_ACCESS_TRANSFER_WRITE_BIT);
-    VkBufferImageCopy region = {
-        .bufferOffset = 0,
-        .bufferRowLength = width,
-        .bufferImageHeight = height,
-        .imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT,0,0,1},
-        .imageOffset = {0,0,0},
-        .imageExtent = {width,height,1},
-    };
-    vkCmdCopyBufferToImage(cb,local_tmp,image->deviceImage,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,1, &region);
-
-    return image;
+void EngineImage::destroyImage(EngineImage *image) {
+    if (image->allocation) {
+        vmaDestroyImage(renderer::vma_allocator,image->deviceImage,image->allocation);
+        vkDestroyImageView(renderer::device,image->imageView,renderer::g_vk_Allocator);
+    }else panic("destroying non VMA not implemented");
 }
+
+// EngineImage* EngineImage::make(VkCommandBuffer cb, ResourceLocator image_source, VkImageUsageFlags usage,bool generate_mips) {
+//     uint32_t width, height, channels;
+//     usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+//     stbi_info(image_source.path, (int*)&width, (int*)&height, (int*)&channels);
+//
+//
+//     auto format   = channels==4?VK_FORMAT_R8G8B8A8_SRGB:
+//                     channels==3?VK_FORMAT_R8G8B8_SRGB:
+//                     channels==2?VK_FORMAT_R8G8_SRGB:
+//                                 VK_FORMAT_R8G8B8_SRGB;
+//     VmaAllocationCreateInfo vmaInfo = {
+//         .usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
+//     };
+//     auto* image= createImage(width, height, format, usage, vmaInfo, generate_mips);
+//
+//
+//     uint8_t* lmem = stbi_load(image_source.path, (int*)&width, (int*)&height, (int*)&channels,15);
+//
+//     VkBuffer local_tmp;
+//     VmaAllocation local_tmp_alloc;
+//     VmaAllocationInfo tmp_info;
+//     vmaInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
+//     vmaInfo.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT|VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+//     vmaInfo.requiredFlags = VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+//     VkBufferCreateInfo buffer_info = {
+//         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+//         .flags = 0,
+//         .size = width*height*channels,
+//         .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+//         .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+//         .queueFamilyIndexCount = 1,
+//         .pQueueFamilyIndices = &renderer::g_QueueFamily,
+//     };
+//     vmaCreateBuffer(renderer::vma_allocator,&buffer_info,&vmaInfo,&local_tmp,&local_tmp_alloc,&tmp_info);
+//     deferffl([local_tmp, local_tmp_alloc]{vmaDestroyBuffer(renderer::vma_allocator,local_tmp,local_tmp_alloc);});
+//     memcpy(tmp_info.pMappedData,lmem,1/*8 bit srgb*/*width*height*channels);
+//     vmaFlushAllocation(renderer::vma_allocator,local_tmp_alloc,tmp_info.offset,tmp_info.size);
+//     stbi_image_free(lmem);
+//     image->ChangeImageLayout(cb,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_ACCESS_TRANSFER_WRITE_BIT);
+//     VkBufferImageCopy region = {
+//         .bufferOffset = 0,
+//         .bufferRowLength = width,
+//         .bufferImageHeight = height,
+//         .imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT,0,0,1},
+//         .imageOffset = {0,0,0},
+//         .imageExtent = {width,height,1},
+//     };
+//     vkCmdCopyBufferToImage(cb,local_tmp,image->deviceImage,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,1, &region);
+//
+//     return image;
+// }
 
 void EngineImage::ChangeImageLayout(VkCommandBuffer cb, VkImageLayout newLayout,
                                     VkPipelineStageFlags dst_stage, VkAccessFlags dst_access, uint32_t mip_start, uint32_t mip_count) {
@@ -186,11 +212,11 @@ void EngineImage::ChangeImageLayout(VkCommandBuffer cb, VkImageLayout newLayout,
         .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
         .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
         .image = deviceImage,
-        .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT,mip_start,mip_count,0,1},
+        .subresourceRange = {aspect_from_format(format),mip_start,mip_count,0,1},
     };
     vkCmdPipelineBarrier(cb,last_used_stage,dst_stage,0,0,nullptr,0,nullptr,1,&barrier);
     for(uint32_t i=0;i<mip_count;i++) {
-        if (oldlayout!=imageLayout[mip_start + i]) panic();
+        if (oldlayout!=imageLayout[mip_start + i]) panic("mixed mip layout in single transition");
         imageLayout[mip_start + i] = newLayout;
     }
     last_used_access = dst_access;

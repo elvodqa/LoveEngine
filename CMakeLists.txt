@@ -2,8 +2,10 @@ cmake_minimum_required(VERSION 3.28)
 project(LoveEngine)
 
 set(CMAKE_CXX_STANDARD 20)
-
+set(SDL_STATIC ON CACHE BOOL "" FORCE)
+set(SDL_SHARED OFF CACHE BOOL "" FORCE)
 add_subdirectory(external/SDL EXCLUDE_FROM_ALL)
+
 add_subdirectory(external/VulkanMemoryAllocator EXCLUDE_FROM_ALL)
 add_subdirectory(external/entt EXCLUDE_FROM_ALL)
 add_subdirectory(external/portaudio EXCLUDE_FROM_ALL)
@@ -11,6 +13,14 @@ add_subdirectory(external/volk EXCLUDE_FROM_ALL)
 add_subdirectory(external/freetype EXCLUDE_FROM_ALL)
 add_subdirectory(external/nlohmann_json EXCLUDE_FROM_ALL)
 add_subdirectory(external/glm EXCLUDE_FROM_ALL)
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+set(ASSIMP_WARNINGS_AS_ERRORS OFF CACHE BOOL "" FORCE)
+set(ASSIMP_BUILD_ZLIB ON CACHE BOOL "" FORCE)
+#set(ASSIMP_NO_EXPORT ON CACHE BOOL FORCE)
+#set(ASSIMP_BUILD_ZLIB ON CACHE BOOL "" FORCE)
+
+
+add_subdirectory(external/assimp EXCLUDE_FROM_ALL)
 
 
 set(VULKAN_COMPONENTS
@@ -57,8 +67,20 @@ add_executable(LoveEngine
         Renderer/first_renderer.h
         Renderer/ShaderManager.cpp
         Renderer/ShaderManager.h
+        debug_panic.cpp
+        ECS/Transform.h
+        ECS/Tree.h
+        ECS/Mesh.h
+        love.h
+        ECS/Camera.h
+        ECS/EditorSelected.h
+        editor/InpectorRepr.h
+        editor/defaultspecializers.cpp
 )
-
+if(TARGET assimp::assimp)
+    target_link_libraries(LoveEngine PRIVATE assimp::assimp)
+    target_include_directories(LoveEngine PRIVATE external/assimp/include)
+endif ()
 if (TARGET freetype)
     target_link_libraries(LoveEngine PRIVATE freetype)
     target_include_directories(LoveEngine PRIVATE external/freetype/include)
@@ -80,6 +102,7 @@ endif()
 
 if (TARGET SDL3::SDL3)
     target_link_libraries(LoveEngine PRIVATE SDL3::SDL3)
+#    target_link_libraries(LoveEngine PRIVATE SDL3::Headers)
     target_include_directories(LoveEngine PRIVATE external/SDL/include)
 endif()
 
@@ -118,8 +141,21 @@ elseif (UNIX)
 endif()
 if (TARGET LoveEngine)
     add_compile_definitions(_DEBUG)
+    add_compile_definitions(GLM_FORCE_DEPTH_ZERO_TO_ONE)
+    target_compile_options(LoveEngine PRIVATE -Wno-reorder-init-list)
+    target_compile_options(LoveEngine PRIVATE -Wno-nullability-completeness)
+
 endif ()
 target_include_directories(LoveEngine PRIVATE external/stb)
+
+include(FetchContent)
+FetchContent_Declare(
+        cpptrace
+        GIT_REPOSITORY https://github.com/jeremy-rifkin/cpptrace.git
+        GIT_TAG        v0.7.5 # <HASH or TAG>
+)
+FetchContent_MakeAvailable(cpptrace)
+target_link_libraries(LoveEngine PRIVATE cpptrace::cpptrace)
 
 if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
     # target_link_libraries(VKEngine PRIVATE Vulkan::MoltenVK) error?

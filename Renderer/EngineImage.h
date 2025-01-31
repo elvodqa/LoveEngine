@@ -22,7 +22,6 @@ class EngineImage {
     VmaAllocationInfo  allocInfo;
     VkFormat format;
     uint32_t mipcount;
-    VkExtent2D size;
     VkPipelineStageFlags last_used_stage;
     VkAccessFlags last_used_access;
     // uint32_t dirty_offset,dirty_mip_count;
@@ -41,7 +40,7 @@ class EngineImage {
     void ChangeImageLayout(VkCommandBuffer cb, VkImageLayout newLayout,
                            VkPipelineStageFlags dst_stage, VkAccessFlags dst_access, uint32_t mip_start=0, uint32_t mip_count=-1);
 private:
-    ::EngineImage *make(struct ::VkCommandBuffer_T *cb, ResourceLocator image_source, VkImageUsageFlags usage, bool generate_mips);
+    // ::EngineImage *make(struct ::VkCommandBuffer_T *cb, ResourceLocator image_source, VkImageUsageFlags usage, bool generate_mips);
 
 
 };

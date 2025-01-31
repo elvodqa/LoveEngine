@@ -24,6 +24,12 @@ VkCommandBuffer make_cb_for_frame() {
     return cb;
 }
 void init_frame_resource_manager() {
+    VkFenceCreateInfo fenceInfo = {
+        .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+        .flags = 0,
+    };
+    vkCreateFence(renderer::device,&fenceInfo,renderer::g_vk_Allocator,&renderer::thread0_load_fence);
+
     VkCommandPoolCreateInfo pool_info = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
         .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,

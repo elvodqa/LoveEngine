@@ -3,12 +3,15 @@
 //
 #include <entt/entt.hpp>
 #include "first_renderer.h"
-
+#include "../love.h"
 #include <fstream>
 #include <volk.h>
 #include "ImageManager.h"
 #include "MeshManager.h"
 #include "ResourceManager.h"
+#include "../ECS/Camera.h"
+#include "../ECS/Mesh.h"
+#include "../ECS/Transform.h"
 #include "glm/ext/matrix_clip_space.hpp"
 #include "glm/ext/matrix_transform.hpp"
 typedef uint32_t mesh;
@@ -25,6 +28,7 @@ void renderer::first_renderer::init() {
     auto color_format = VK_FORMAT_R8G8B8A8_SRGB;
     target = EngineImage::createImage(w,h,color_format,VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_SAMPLED_BIT,vmaCreateInfo,false);
     depth = EngineImage::createImage(w,h,VK_FORMAT_D32_SFLOAT,VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT,vmaCreateInfo,false);
+
     render_output_image_id = image_manager::register_image(target,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     std::vector<VkDescriptorSetLayout> descriptorSetLayouts({
         renderer::image_manager::imageSetLayout,
@@ -139,7 +143,7 @@ void renderer::first_renderer::init() {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
         .depthTestEnable = VK_TRUE,
         .depthWriteEnable = VK_TRUE,
-        .depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL,
+        .depthCompareOp = VK_COMPARE_OP_LESS,
         .depthBoundsTestEnable = VK_FALSE,
         .minDepthBounds = 0.0f,
         .maxDepthBounds = 1.0f,
@@ -221,12 +225,35 @@ void renderer::first_renderer::init() {
 }
 
 void renderer::first_renderer::drawFrame(uint32_t width, uint32_t height, VkSemaphore wait_semaphore_ready2render, VkSemaphore signal_sempahore_ready2blit) {
-    if (width > target->size.width || height > target->size.height) {
-        // todo resize image
+    if (width > target->width || height > target->height) {
+        uint32_t w,h;
+        SDL_GetWindowSize(renderer::window,(int*)&w,(int*)&h);
+        w= std::max(w,width);
+        h= std::max(h,height);
+        VmaAllocationCreateInfo vmaCreateInfo={
+            .usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
+            .flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
+        };
+        auto color_format = VK_FORMAT_R8G8B8A8_SRGB;
+        {
+            auto depth=first_renderer::depth;
+            auto target=first_renderer::target;
+            auto render_output_image_id = first_renderer::render_output_image_id;
+            deferffl([target,depth,render_output_image_id]() {
+                EngineImage::destroyImage(target);
+                EngineImage::destroyImage(depth);
+                image_manager::evict_image_now(render_output_image_id);
+            });
+        }
+        target = EngineImage::createImage(w,h,color_format,VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_SAMPLED_BIT,vmaCreateInfo,false);
+        depth = EngineImage::createImage(w,h,VK_FORMAT_D32_SFLOAT,VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT,vmaCreateInfo,false);
+
+        render_output_image_id = image_manager::register_image(target,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     }
     //
     // entt::registry registry;
-    // auto view = registry.view<mesh>();
+    auto regview = love::registry.view<Mesh,Transform>();
+
     // view.each([&](auto entity, auto mesh) {
     // });
     camera cam;
@@ -246,7 +273,7 @@ void renderer::first_renderer::drawFrame(uint32_t width, uint32_t height, VkSema
     };
     VkRenderingAttachmentInfo depthAttachment={
         .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-        .clearValue = VkClearValue{0},
+        .clearValue = VkClearValue{1.f},
         .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
         .imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
@@ -263,6 +290,7 @@ void renderer::first_renderer::drawFrame(uint32_t width, uint32_t height, VkSema
         .pDepthAttachment = &depthAttachment,
     };
     target->ChangeImageLayout(cb,VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT);
+    if (depth->imageLayout[0]!=VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL) depth->ChangeImageLayout(cb,VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT|VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT);
     vkCmdBeginRendering(cb,&renderingInfo);
     vkCmdBindPipeline(cb,VK_PIPELINE_BIND_POINT_GRAPHICS,default_pipeline);
     vkCmdBindIndexBuffer(cb,*mesh_manager::static_ib,0,VK_INDEX_TYPE_UINT32);
@@ -271,19 +299,30 @@ void renderer::first_renderer::drawFrame(uint32_t width, uint32_t height, VkSema
     vkCmdBindVertexBuffers(cb,0,2,vertexBuffers,offsets);
 
     VkRect2D sci={.offset = {0,0}, .extent = {width,height}};
-    VkViewport viewport={.x=0, .y=0, .width=(float)width, .height=(float)height, .minDepth=0, .maxDepth=1};
+    VkViewport viewport={.x=0, .y=0, .width=(float)width, .height=(float)height, .minDepth=0, .maxDepth=1.f};
     vkCmdSetScissor(cb,0,1,&sci);
     vkCmdSetViewport(cb,0,1,&viewport);
-    auto proj = glm::perspective(3.1415f/2.f, ((float)width)/(float)height, 0.f, 1.f);
-    auto view = glm::lookAt(glm::vec3(10, 10, 10),glm::vec3(0,0,1), glm::vec3(0,0,1));
-    auto viewproj = proj*view;
+    auto[cameraComp,TransformComp]=love::registry.get<Camera,Transform>(love::registry.view<Camera>().front());
+
+    auto proj = glm::perspective(cameraComp.fovy, ((float)width)/(float)height, cameraComp.nearPlane, cameraComp.farPlane);
+    proj[1][1] *= -1; // gl -> vk
+    auto view = glm::lookAt(TransformComp.translation,TransformComp.forward(),glm::vec3(0.f,0.f,1.f));
+    auto viewproj = proj * view;
     vkCmdPushConstants(cb,default_pipeline_layout,VK_SHADER_STAGE_VERTEX_BIT,0,16*sizeof(float),&viewproj);
+    auto defaultmodel = glm::mat4(1.f);
+
+    vkCmdPushConstants(cb,default_pipeline_layout,VK_SHADER_STAGE_VERTEX_BIT,16*sizeof(float), 16*sizeof(float),&defaultmodel);
 
     vkCmdBindDescriptorSets(cb,VK_PIPELINE_BIND_POINT_GRAPHICS,default_pipeline_layout,0,1, &image_manager::descriptorset,0,nullptr);
     {
-        for (auto mesh:mesh_manager::meshes) {
+        regview.each([&](auto id,Mesh& meshComp,Transform& transform) {
+            auto mesh = mesh_manager::meshes[meshComp.meshID];
+            auto mod=transform.getTransformMatrix();
+
+            vkCmdPushConstants(cb,default_pipeline_layout,VK_SHADER_STAGE_VERTEX_BIT,16*sizeof(float), 16*sizeof(float),&mod);
             vkCmdDrawIndexed(cb,mesh.index_count,1,mesh.index_offset,mesh.vertex_offset,0);
-        }
+
+        });
     }
     vkCmdEndRendering(cb);
     target->ChangeImageLayout(cb,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_ACCESS_TRANSFER_READ_BIT);

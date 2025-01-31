@@ -14,7 +14,9 @@
 // Read comments in imgui_impl_vulkan.h.
 //#define VK_USE_PLATFORM_WIN32_KHR
 #define STB_IMAGE_IMPLEMENTATION
-
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/glm.hpp>
 #define IMGUI_IMPL_VULKAN_USE_VOLK
 #define IMGUI_IMPL_VULKAN_HAS_DYNAMIC_RENDERING
 #define VOLK_IMPLEMENTATION
@@ -30,7 +32,7 @@
 #include <volk.h>
 #include "vk_mem_alloc.h"
 #include "Renderer/first_renderer.h"
-#include <stdio.h>          // SDL_Log, fSDL_Log
+#include <cstdio>
 #include <SDL3/SDL.h>
 #include "debug_panic.h"
 
@@ -42,7 +44,17 @@
 
 
 #include <iostream>
+#include <entt/entt.hpp>
 
+#include "love.h"
+#include "assimp/postprocess.h"
+#include "assimp/scene.h"
+
+#include "assimp/Importer.hpp"
+#include "ECS/Camera.h"
+#include "ECS/Mesh.h"
+#include "ECS/Transform.h"
+#include "ECS/Tree.h"
 #include "editor/editor.hpp"
 #include "Renderer/ImageManager.h"
 #include "Renderer/MeshManager.h"
@@ -57,12 +69,9 @@ static void check_vk_result(VkResult err)
 
     if (err == 0)
         return;
-    SDL_Log("[vulkan] Error: VkResult = %d", err);
-    if (err < 0)
-        panic();
+    panic("[vulkan] Error: VkResult = {}", (int)err);
+
 }
-
-
 
 static void FrameRender(ImGui_ImplVulkanH_Window* wd, ImDrawData* draw_data)
 {
@@ -95,8 +104,24 @@ static void FrameRender(ImGui_ImplVulkanH_Window* wd, ImDrawData* draw_data)
         err = vkBeginCommandBuffer(fd->CommandBuffer, &info);
         check_vk_result(err);
     }
+    int xoff;
+    int yoff;
+    int w,h;
     {
-        renderer::first_renderer::drawFrame(wd->Width,wd->Height,get_frame_no()==0?VK_NULL_HANDLE:renderer::first_renderer::r2r,renderer::first_renderer::r2b);
+        xoff = love::editor::wxmn;
+        yoff = love::editor::wymn;
+        h = (((int)love::editor::wymx-yoff));
+        w = (((int)love::editor::wxmx-xoff));
+        if (xoff < 0||yoff < 0||xoff+w > wd->Width||yoff+h > wd->Height) {
+            xoff = 0;
+            yoff = 0;
+            w = wd->Width;
+            h = wd->Height;
+        }
+
+    }
+    {
+        renderer::first_renderer::drawFrame(w,h,get_frame_no()==0?VK_NULL_HANDLE:renderer::first_renderer::r2r,renderer::first_renderer::r2b);
         VkImageMemoryBarrier barrier = {
             .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
             .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
@@ -116,13 +141,13 @@ static void FrameRender(ImGui_ImplVulkanH_Window* wd, ImDrawData* draw_data)
         };
         vkCmdPipelineBarrier(fd->CommandBuffer,VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,0,0,nullptr,0,nullptr,1,&barrier);//trasition to dst opt
         VkImageBlit blit={
-            .srcOffsets = {{0,0,0},{wd->Width,wd->Height,1}},
+            .srcOffsets = {{0,0,0},{w,h,1}},
             .srcSubresource = {
                 .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
                 .mipLevel = 0,
                 .baseArrayLayer = 0,
                 .layerCount = 1},
-            .dstOffsets = {{0,0,0},{wd->Width,wd->Height,1}},
+            .dstOffsets = {{xoff,yoff,0},{w+xoff,h+yoff,1}},
             .dstSubresource = {
                 .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
                 .mipLevel = 0,
@@ -204,160 +229,219 @@ static void FramePresent(ImGui_ImplVulkanH_Window* wd)
 // Main code
 int main(int, char**)
 {
-    try{
-        SDL_SetLogPriorities(SDL_LogPriority::SDL_LOG_PRIORITY_DEBUG);
+    // entt::registry registry;
 
-        // Setup SDL
-        if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD) != 0)
-        {
-            SDL_Log("Error: SDL_Init(): %s\n", SDL_GetError());
-            return -1;
-        }
-        renderer::init();
-        // Setup Dear ImGui context
-        IMGUI_CHECKVERSION();
-        ImGui::CreateContext();
-        ImGuiIO& io = ImGui::GetIO(); (void)io;
-        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
-        io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
+    SDL_SetLogPriorities(SDL_LogPriority::SDL_LOG_PRIORITY_DEBUG);
 
-        // Setup Dear ImGui style
-        ImGui::StyleColorsDark();
-        //ImGui::StyleColorsLight();
-
-        // Setup Platform/Renderer backends
-        ImGui_ImplSDL3_InitForVulkan(renderer::window);
-        ImGui_ImplVulkan_InitInfo init_info = {};
-        init_info.Instance = renderer::vk_Instance;
-        init_info.PhysicalDevice = renderer::g_PhysicalDevice;
-        init_info.Device = renderer::device;
-        init_info.QueueFamily = renderer::g_QueueFamily;
-        init_info.Queue = renderer::g_Queue;
-        init_info.PipelineCache = renderer::g_PipelineCache;
-        init_info.DescriptorPool = renderer::imgui_DescriptorPool;
-        init_info.RenderPass = renderer::imgui::wd->RenderPass;
-        init_info.Subpass = 0;
-        init_info.MinImageCount = renderer::g_MinImageCount;
-        init_info.ImageCount = renderer::imgui::wd->ImageCount;
-        init_info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
-        init_info.Allocator = renderer::g_vk_Allocator;
-        init_info.CheckVkResultFn = check_vk_result;
-        ImGui_ImplVulkan_Init(&init_info);
-
-        renderer::mesh_manager::init();
-        renderer::image_manager::init();
-        renderer::first_renderer::init();
-        // Load Fonts
-        // - If no fonts are loaded, dear imgui will use the default font. You can also load multiple fonts and use ImGui::PushFont()/PopFont() to select them.
-        // - AddFontFromFileTTF() will return the ImFont* so you can store it if you need to select the font among multiple.
-        // - If the file cannot be loaded, the function will return a nullptr. Please handle those errors in your application (e.g. use an assertion, or display an error and quit).
-        // - The fonts will be rasterized at a given size (w/ oversampling) and stored into a texture when calling ImFontAtlas::Build()/GetTexDataAsXXXX(), which ImGui_ImplXXXX_NewFrame below will call.
-        // - Use '#define IMGUI_ENABLE_FREETYPE' in your imconfig file to use Freetype for higher quality font rendering.
-        // - Read 'docs/FONTS.md' for more instructions and details.
-        // - Remember that in C/C++ if you want to include a backslash \ in a string literal you need to write a double backslash \\ !
-        //io.Fonts->AddFontDefault();
-        //io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\segoeui.ttf", 18.0f);
-        //io.Fonts->AddFontFromFileTTF("../../misc/fonts/DroidSans.ttf", 16.0f);
-        //io.Fonts->AddFontFromFileTTF("../../misc/fonts/Roboto-Medium.ttf", 16.0f);
-        //io.Fonts->AddFontFromFileTTF("../../misc/fonts/Cousine-Regular.ttf", 15.0f);
-        //ImFont* font = io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\ArialUni.ttf", 18.0f, nullptr, io.Fonts->GetGlyphRangesJapanese());
-        //IM_ASSERT(font != nullptr);
-
-        // Our state
-        bool show_demo_window = true;
-        bool show_another_window = false;
-        ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
-
-        editor = new love::Editor(renderer::window);
-        editor->log(love::editor::LogType::Trace, "I'm a trace message");
-        editor->log(love::editor::LogType::Warn, "I'm a warning!! message");
-        editor->log(love::editor::LogType::Info, "I'm informing you");
-        editor->log(love::editor::LogType::Error, "THIS PROGRAM IS BLOWING UP ERROR");
-        editor->log(love::editor::LogType::Debug, "Debugging started");
-
-        int fr=0;
-        // Main loop
-        bool done = false;
-        while (!done)
-        {
-            // Poll and handle events (inputs, window resize, etc.)
-            // You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to tell if dear imgui wants to use your inputs.
-            // - When io.WantCaptureMouse is true, do not dispatch mouse input data to your main application, or clear/overwrite your copy of the mouse data.
-            // - When io.WantCaptureKeyboard is true, do not dispatch keyboard input data to your main application, or clear/overwrite your copy of the keyboard data.
-            // Generally you may always pass all inputs to dear imgui, and hide them from your application based on those two flags.
-            SDL_Event event;
-            while (SDL_PollEvent(&event))
-            {
-                ImGui_ImplSDL3_ProcessEvent(&event);
-                editor->check_events(&event);
-                if (event.type == SDL_EVENT_QUIT)
-                    done = true;
-                if (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED && event.window.windowID == SDL_GetWindowID(renderer::window))
-                    done = true;
-
-            }
-            if (SDL_GetWindowFlags(renderer::window) & SDL_WINDOW_MINIMIZED)
-            {
-                SDL_Delay(10);
-                continue;
-            }
-
-            // Resize swap chain?
-            int fb_width, fb_height;
-            SDL_GetWindowSize(renderer::window, &fb_width, &fb_height);
-            if (fb_width > 0 && fb_height > 0 && (renderer::g_SwapChainRebuild || renderer::imgui::imgui_MainWindowData.Width != fb_width || renderer::imgui::imgui_MainWindowData.Height != fb_height))
-            {
-                ImGui_ImplVulkan_SetMinImageCount(renderer::g_MinImageCount);
-                ImGui_ImplVulkanH_CreateOrResizeWindow(renderer::vk_Instance, renderer::g_PhysicalDevice, renderer::device, &renderer::imgui::imgui_MainWindowData, renderer::g_QueueFamily, renderer::g_vk_Allocator, fb_width, fb_height, renderer::g_MinImageCount);
-                renderer::imgui::imgui_MainWindowData.FrameIndex = 0;
-                renderer::g_SwapChainRebuild = false;
-            }
-
-            // Start the Dear ImGui frame
-            ImGui_ImplVulkan_NewFrame();
-            ImGui_ImplSDL3_NewFrame();
-            ImGui::NewFrame();
-
-            editor->draw(done);
-
-            {// draw actual frame
-                // int width = 400, height = 300;
-                // renderer::first_renderer::drawFrame(width, height, TODO, TODO);
-                // ImGui::Image(renderer::first_renderer::render_output_image_id, ImVec2(width, height));
-            }
-            // Rendering
-            ImGui::Render();
-            ImDrawData* draw_data = ImGui::GetDrawData();
-            const bool is_minimized = (draw_data->DisplaySize.x <= 0.0f || draw_data->DisplaySize.y <= 0.0f);
-            if (!is_minimized)
-            {
-                renderer::imgui::wd->ClearValue.color.float32[0] = clear_color.x * clear_color.w;
-                renderer::imgui::wd->ClearValue.color.float32[1] = clear_color.y * clear_color.w;
-                renderer::imgui::wd->ClearValue.color.float32[2] = clear_color.z * clear_color.w;
-                renderer::imgui::wd->ClearValue.color.float32[3] = clear_color.w;
-                FrameRender(renderer::imgui::wd, draw_data);
-                FramePresent(renderer::imgui::wd);
-            }
-            advance_frame_and_execute_cleanups();
-        }
-
-        // Cleanup
-        auto err = vkDeviceWaitIdle(renderer::device);
-        check_vk_result(err);
-        ImGui_ImplVulkan_Shutdown();
-        ImGui_ImplSDL3_Shutdown();
-        ImGui::DestroyContext();
-
-        renderer::CleanupVulkanWindow();
-        renderer::CleanupVulkan();
-
-        SDL_DestroyWindow(renderer::window);
-        SDL_Quit();
+    // Setup SDL
+    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD) != 0)
+    {
+        SDL_Log("Error: SDL_Init(): %s\n", SDL_GetError());
+        return -1;
     }
-    catch (std::exception &e){
-        std::cout << e.what() << std::endl;
-        __asm("nop");
+    renderer::init();
+    // Setup Dear ImGui context
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO(); (void)io;
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
+
+    // Setup Dear ImGui style
+    ImGui::StyleColorsDark();
+    //ImGui::StyleColorsLight();
+
+    // Setup Platform/Renderer backends
+    ImGui_ImplSDL3_InitForVulkan(renderer::window);
+    ImGui_ImplVulkan_InitInfo init_info = {};
+    init_info.Instance = renderer::vk_Instance;
+    init_info.PhysicalDevice = renderer::g_PhysicalDevice;
+    init_info.Device = renderer::device;
+    init_info.QueueFamily = renderer::g_QueueFamily;
+    init_info.Queue = renderer::g_Queue;
+    init_info.PipelineCache = renderer::g_PipelineCache;
+    init_info.DescriptorPool = renderer::imgui_DescriptorPool;
+    init_info.RenderPass = renderer::imgui::wd->RenderPass;
+    init_info.Subpass = 0;
+    init_info.MinImageCount = renderer::g_MinImageCount;
+    init_info.ImageCount = renderer::imgui::wd->ImageCount;
+    init_info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+    init_info.Allocator = renderer::g_vk_Allocator;
+    init_info.CheckVkResultFn = check_vk_result;
+    ImGui_ImplVulkan_Init(&init_info);
+
+
+    // ENGINE
+    renderer::mesh_manager::init();
+    renderer::image_manager::init();
+    renderer::first_renderer::init();
+    love::editor::editor_init();
+
+    Assimp::Importer Importer;
+    auto file = Importer.ReadFile(R"(D:\GitD\LoveEngine\editor\assets\dragon_recon\blender out1.ply)",
+        aiPostProcessSteps::aiProcess_Triangulate
+        );
+    auto cb = make_cb_for_frame();
+    VkCommandBufferBeginInfo begin_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+    };
+    vkBeginCommandBuffer(cb, &begin_info);
+    uint32_t mesh_ID;
+    assert(file->mNumMeshes==1);
+    for (auto i = 0; i < file->mNumMeshes; i++) {
+        auto mesh = file->mMeshes[i];
+        auto IB = new uint32_t[mesh->mNumFaces*3];
+        for (int j = 0; j < mesh->mNumFaces; ++j) {
+            auto face = mesh->mFaces[j];
+            for (int k = 0; k < 3; ++k) {
+                IB[3*j+k]=face.mIndices[k];
+            }
+        }
+        float* zart = new float[mesh->mNumVertices*2];
+        for (int j = 0; j < mesh->mNumVertices; ++j) {zart[2*j]=mesh->mVertices[j].x;zart[2*j+1]=mesh->mVertices[j].y;}
+        mesh_ID = renderer::mesh_manager::load_static_mesh(cb, (uint32_t *) mesh->mVertices, mesh->mNumVertices, IB,
+                                                           mesh->mNumFaces * 3, (float *) zart);
+        delete[] zart;
+        delete[] IB;
     }
+    vkEndCommandBuffer(cb);
+    VkSubmitInfo submit_info = {
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .commandBufferCount = 1,
+        .pCommandBuffers = &cb,
+    };
+    vkQueueSubmit(renderer::g_Queue, 1, &submit_info, renderer::thread0_load_fence);
+    vkWaitForFences(renderer::device, 1, &renderer::thread0_load_fence, VK_TRUE, UINT64_MAX);
+    vkResetFences(renderer::device, 1, &renderer::thread0_load_fence);
+    auto entity = love::registry.create();
+    love::registry.emplace<Transform>(entity,glm::vec3(0,0,0),glm::quat(0,0,0,1),glm::vec3(1,1,1));
+    love::registry.emplace<Mesh>(entity,mesh_ID);
+    for (int i = 0; i < 24; ++i) {
+        auto entity = love::registry.create();
+        love::registry.emplace<Transform>(entity,glm::vec3(2.5*sin(3.1415*i/12.f),-2.5*cos(3.1415*i/12.f),0),glm::angleAxis(3.1415f*i/12.f,glm::vec3(0,0,1.f)),glm::vec3(.25,.25,.25));
+        love::registry.emplace<Mesh>(entity,mesh_ID);
+    }
+    auto cam = love::registry.create();
+    love::registry.emplace<Transform>(cam,glm::vec3(0,0,0),glm::quat(0,0,0,1),glm::vec3(1,1,1));
+    float deg=90;
+    float fovy=deg * 3.1415f/180.f;
+    love::registry.emplace<Camera>(cam,fovy,0.01f,10000.f);
+    // /ENGINE
+
+
+
+    // Load Fonts
+    // - If no fonts are loaded, dear imgui will use the default font. You can also load multiple fonts and use ImGui::PushFont()/PopFont() to select them.
+    // - AddFontFromFileTTF() will return the ImFont* so you can store it if you need to select the font among multiple.
+    // - If the file cannot be loaded, the function will return a nullptr. Please handle those errors in your application (e.g. use an assertion, or display an error and quit).
+    // - The fonts will be rasterized at a given size (w/ oversampling) and stored into a texture when calling ImFontAtlas::Build()/GetTexDataAsXXXX(), which ImGui_ImplXXXX_NewFrame below will call.
+    // - Use '#define IMGUI_ENABLE_FREETYPE' in your imconfig file to use Freetype for higher quality font rendering.
+    // - Read 'docs/FONTS.md' for more instructions and details.
+    // - Remember that in C/C++ if you want to include a backslash \ in a string literal you need to write a double backslash \\ !
+    //io.Fonts->AddFontDefault();
+    //io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\segoeui.ttf", 18.0f);
+    //io.Fonts->AddFontFromFileTTF("../../misc/fonts/DroidSans.ttf", 16.0f);
+    //io.Fonts->AddFontFromFileTTF("../../misc/fonts/Roboto-Medium.ttf", 16.0f);
+    //io.Fonts->AddFontFromFileTTF("../../misc/fonts/Cousine-Regular.ttf", 15.0f);
+    //ImFont* font = io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\ArialUni.ttf", 18.0f, nullptr, io.Fonts->GetGlyphRangesJapanese());
+    //IM_ASSERT(font != nullptr);
+
+    // Our state
+    bool show_demo_window = true;
+    bool show_another_window = false;
+    ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+
+    editor = new love::Editor(renderer::window);
+    editor->log(love::editor::LogType::Trace, "I'm a trace message");
+    editor->log(love::editor::LogType::Warn, "I'm a warning!! message");
+    editor->log(love::editor::LogType::Info, "I'm informing you");
+    editor->log(love::editor::LogType::Error, "THIS PROGRAM IS BLOWING UP ERROR");
+    editor->log(love::editor::LogType::Debug, "Debugging started");
+
+    int fr=0;
+    // Main loop
+    bool done = false;
+    while (!done)
+    {
+        // Poll and handle events (inputs, window resize, etc.)
+        // You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to tell if dear imgui wants to use your inputs.
+        // - When io.WantCaptureMouse is true, do not dispatch mouse input data to your main application, or clear/overwrite your copy of the mouse data.
+        // - When io.WantCaptureKeyboard is true, do not dispatch keyboard input data to your main application, or clear/overwrite your copy of the keyboard data.
+        // Generally you may always pass all inputs to dear imgui, and hide them from your application based on those two flags.
+        SDL_Event event;
+        SDL_WaitEvent(nullptr);
+        while (SDL_PollEvent(&event))
+        {
+            ImGui_ImplSDL3_ProcessEvent(&event);
+            editor->check_events(&event);
+            if (event.type == SDL_EVENT_QUIT)
+                done = true;
+            if (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED && event.window.windowID == SDL_GetWindowID(renderer::window))
+                done = true;
+
+        }
+        if (SDL_GetWindowFlags(renderer::window) & SDL_WINDOW_MINIMIZED)
+        {
+            SDL_Delay(10);
+            continue;
+        }
+
+        // Resize swap chain?
+        int fb_width, fb_height;
+        SDL_GetWindowSize(renderer::window, &fb_width, &fb_height);
+        if (fb_width > 0 && fb_height > 0 && (renderer::g_SwapChainRebuild || renderer::imgui::imgui_MainWindowData.Width != fb_width || renderer::imgui::imgui_MainWindowData.Height != fb_height))
+        {
+            ImGui_ImplVulkan_SetMinImageCount(renderer::g_MinImageCount);
+            ImGui_ImplVulkanH_CreateOrResizeWindow(renderer::vk_Instance, renderer::g_PhysicalDevice, renderer::device, &renderer::imgui::imgui_MainWindowData, renderer::g_QueueFamily, renderer::g_vk_Allocator, fb_width, fb_height, renderer::g_MinImageCount);
+            renderer::imgui::imgui_MainWindowData.FrameIndex = 0;
+            renderer::g_SwapChainRebuild = false;
+        }
+
+        {
+            love::registry.get<Transform>(cam)={(glm::vec3(2*sin(get_frame_no()/240.), -2*cos(get_frame_no()/240.), 0)),glm::quatLookAt((glm::vec3(-sin(get_frame_no()/240.), cos(get_frame_no()/240.), 0)),glm::vec3(0.f,0.f,1.f)),glm::vec3(1.f)};
+        }
+        // Start the Dear ImGui frame
+        ImGui_ImplVulkan_NewFrame();
+        ImGui_ImplSDL3_NewFrame();
+        ImGui::NewFrame();
+
+        editor->draw(done);
+
+        {// draw actual frame
+            // int width = 400, height = 300;
+            // renderer::first_renderer::drawFrame(width, height, TODO, TODO);
+            // ImGui::Image(renderer::first_renderer::render_output_image_id, ImVec2(width, height));
+        }
+        // Rendering
+        ImGui::Render();
+        ImDrawData* draw_data = ImGui::GetDrawData();
+        const bool is_minimized = (draw_data->DisplaySize.x <= 0.0f || draw_data->DisplaySize.y <= 0.0f);
+        if (!is_minimized)
+        {
+            renderer::imgui::wd->ClearValue.color.float32[0] = clear_color.x * clear_color.w;
+            renderer::imgui::wd->ClearValue.color.float32[1] = clear_color.y * clear_color.w;
+            renderer::imgui::wd->ClearValue.color.float32[2] = clear_color.z * clear_color.w;
+            renderer::imgui::wd->ClearValue.color.float32[3] = clear_color.w;
+            FrameRender(renderer::imgui::wd, draw_data);
+            FramePresent(renderer::imgui::wd);
+        }
+        advance_frame_and_execute_cleanups();
+    }
+
+    // Cleanup
+    auto err = vkDeviceWaitIdle(renderer::device);
+    check_vk_result(err);
+    ImGui_ImplVulkan_Shutdown();
+    ImGui_ImplSDL3_Shutdown();
+    ImGui::DestroyContext();
+
+    renderer::CleanupVulkanWindow();
+    renderer::CleanupVulkan();
+
+    SDL_DestroyWindow(renderer::window);
+    SDL_Quit();
+
 
     return 0;
 }

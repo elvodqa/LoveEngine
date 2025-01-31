@@ -18,6 +18,7 @@ void renderer::mesh_manager::init() {
 
 int renderer::mesh_manager::load_static_mesh(VkCommandBuffer cb, uint32_t *vertices, uint32_t vtx_count,
     uint32_t *indices, uint32_t idx_count, float *UVs) {
+    if (!UVs || !indices || !vertices) panic("missing mesh channel");
     uint32_t idx_bytes = idx_count*sizeof(uint32_t);
     if (static_ib->size+idx_bytes>=static_ib->capacity) {
         static_ib->grow(cb, static_ib->size+idx_bytes);
@@ -58,16 +59,16 @@ int renderer::mesh_manager::load_static_mesh(VkCommandBuffer cb, uint32_t *verti
         VkBufferCreateInfo bufcreateinfo={
             .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
             .size = swap_needed,
-            .usage = VK_ACCESS_TRANSFER_READ_BIT|VK_ACCESS_HOST_WRITE_BIT,
+            .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
             .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
             .queueFamilyIndexCount = 1,
             .pQueueFamilyIndices = &renderer::g_QueueFamily
             };
 
         VmaAllocationCreateInfo alloccreateinfo={
-            .flags = VMA_ALLOCATION_CREATE_MAPPED_BIT,
+            .flags = VMA_ALLOCATION_CREATE_MAPPED_BIT|VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
             .usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST,
-            .requiredFlags = VK_MEMORY_PROPERTY_HOST_CACHED_BIT|VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
+            .requiredFlags = VK_MEMORY_PROPERTY_HOST_CACHED_BIT|VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
             };
         VkBuffer staging_buf;
         VmaAllocation alloc;

@@ -39,13 +39,16 @@ static constexpr bool is_write(VkAccessFlags access) {
     return access&write_mask;
 }
 void set_dirty_range(EngineBuffer& buf,uint32_t offset, uint32_t size);
-template <typename... Buffers>
-void mark_and_barrier_many(VkCommandBuffer cb,VkPipelineStageFlags dst_stage,VkAccessFlags dst_access, Buffers&... buffers) requires ((std::same_as<Buffers, EngineBuffer> && ...)) {
+template <typename ...Buffers>
+void mark_and_barrier_many(VkCommandBuffer cb,VkPipelineStageFlags dst_stage,VkAccessFlags dst_access, Buffers &...buffers) requires ((std::same_as<Buffers, EngineBuffer> && ...)) {
     VkPipelineStageFlags src_stage_mask=0;
     VkBufferMemoryBarrier barrier[sizeof...(Buffers)];
     int i=0;
 
-    ([&] {
+    ([&src_stage_mask,&i,&barrier,dst_stage,dst_access](EngineBuffer buffers) {
+        auto dirty_offset = buffers.dirty_offset;
+        auto dirty_size = buffers.dirty_size;
+        if (dirty_size==0)dirty_size=buffers.size;
         if (is_write(dst_access)) {
             if (is_write(buffers.last_used_access)) { // w->w
                 barrier[i++]=VkBufferMemoryBarrier{
@@ -55,8 +58,8 @@ void mark_and_barrier_many(VkCommandBuffer cb,VkPipelineStageFlags dst_stage,VkA
                     .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                     .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                     .buffer = buffers,
-                    .offset = buffers.dirty_offset,
-                    .size = buffers.dirty_size,
+                    .offset = dirty_offset,
+                    .size = dirty_size,
                 };
             }
             else {// exec dependency only r->w
@@ -71,8 +74,8 @@ void mark_and_barrier_many(VkCommandBuffer cb,VkPipelineStageFlags dst_stage,VkA
                                    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                                    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                                    .buffer = buffers,
-                                   .offset = buffers.dirty_offset,
-                                   .size = buffers.dirty_size,
+                                   .offset = dirty_offset,
+                                   .size = dirty_size,
                                };
             }
             else {//read-read nothing
@@ -81,9 +84,10 @@ void mark_and_barrier_many(VkCommandBuffer cb,VkPipelineStageFlags dst_stage,VkA
         }
         buffers.last_used_access = dst_access;
         buffers.last_used_stage = dst_stage;
-        buffers.dirty_offset=0;
-        buffers.dirty_size=buffers.size;
-    }(), ...);
+        dirty_offset=0;
+        dirty_size=buffers.size;
+    }(buffers), ...);
+    src_stage_mask=src_stage_mask==0?VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT:src_stage_mask;
     vkCmdPipelineBarrier(cb,src_stage_mask,dst_stage,0,0,nullptr,i,barrier,0, nullptr);
 }
 
