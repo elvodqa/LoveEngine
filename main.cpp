@@ -14,11 +14,9 @@
 // Read comments in imgui_impl_vulkan.h.
 //#define VK_USE_PLATFORM_WIN32_KHR
 #define STB_IMAGE_IMPLEMENTATION
-#define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/glm.hpp>
 #define IMGUI_IMPL_VULKAN_USE_VOLK
-#define IMGUI_IMPL_VULKAN_HAS_DYNAMIC_RENDERING
 #define VOLK_IMPLEMENTATION
 #define VMA_IMPLEMENTATION
 #define VMA_STATIC_VULKAN_FUNCTIONS 0
@@ -35,27 +33,19 @@
 #include <cstdio>
 #include <SDL3/SDL.h>
 #include "debug_panic.h"
-
-// This example doesn't compile with Emscripten yet! Awaiting SDL3 support.
-
-//#define APP_USE_UNLIMITED_FRAME_RATE
-
-// Data
-
-
 #include <iostream>
 #include <entt/entt.hpp>
-
 #include "love.h"
+#include "Assets/Loaders/Mesh.h"
 #include "assimp/postprocess.h"
 #include "assimp/scene.h"
-
 #include "assimp/Importer.hpp"
 #include "ECS/Camera.h"
 #include "ECS/Mesh.h"
 #include "ECS/Transform.h"
 #include "ECS/Tree.h"
 #include "editor/editor.hpp"
+#include "ProjectManager/projectManager.h"
 #include "Renderer/ImageManager.h"
 #include "Renderer/MeshManager.h"
 #include "Renderer/Renderer.h"
@@ -153,6 +143,7 @@ static void FrameRender(ImGui_ImplVulkanH_Window* wd, ImDrawData* draw_data)
                 .mipLevel = 0,
                 .baseArrayLayer = 0,
                 .layerCount = 1},
+
         };
         vkCmdBlitImage(fd->CommandBuffer,*renderer::first_renderer::target,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,fd->Backbuffer,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,1,&blit,VK_FILTER_NEAREST);
         barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
@@ -227,8 +218,15 @@ static void FramePresent(ImGui_ImplVulkanH_Window* wd)
 }
 
 // Main code
-int main(int, char**)
+int main(int arg_count, char** args)
 {
+    fs::path pj;
+    for (int i = 0; i < arg_count; ++i) {
+        if (strcmp(args[i],"--project")==0&&i < arg_count - 1) {
+                        pj = args[i+1];
+        }
+            std::cout<<args[i]<<std::endl;
+    }
     // entt::registry registry;
 
     SDL_SetLogPriorities(SDL_LogPriority::SDL_LOG_PRIORITY_DEBUG);
@@ -278,33 +276,37 @@ int main(int, char**)
     love::editor::editor_init();
 
     Assimp::Importer Importer;
-    auto file = Importer.ReadFile(R"(D:\GitD\LoveEngine\editor\assets\dragon_recon\blender out1.ply)",
-        aiPostProcessSteps::aiProcess_Triangulate
-        );
+
     auto cb = make_cb_for_frame();
     VkCommandBufferBeginInfo begin_info = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
         .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
     };
     vkBeginCommandBuffer(cb, &begin_info);
-    uint32_t mesh_ID;
-    assert(file->mNumMeshes==1);
-    for (auto i = 0; i < file->mNumMeshes; i++) {
-        auto mesh = file->mMeshes[i];
-        auto IB = new uint32_t[mesh->mNumFaces*3];
-        for (int j = 0; j < mesh->mNumFaces; ++j) {
-            auto face = mesh->mFaces[j];
-            for (int k = 0; k < 3; ++k) {
-                IB[3*j+k]=face.mIndices[k];
-            }
-        }
-        float* zart = new float[mesh->mNumVertices*2];
-        for (int j = 0; j < mesh->mNumVertices; ++j) {zart[2*j]=mesh->mVertices[j].x;zart[2*j+1]=mesh->mVertices[j].y;}
-        mesh_ID = renderer::mesh_manager::load_static_mesh(cb, (uint32_t *) mesh->mVertices, mesh->mNumVertices, IB,
-                                                           mesh->mNumFaces * 3, (float *) zart);
-        delete[] zart;
-        delete[] IB;
-    }
+    // assert(file->mNumMeshes==1);
+    // for (auto i = 0; i < file->mNumMeshes; i++) {
+    //     auto mesh = file->mMeshes[i];
+    //     auto IB = new uint32_t[mesh->mNumFaces*3];
+    //     for (int j = 0; j < mesh->mNumFaces; ++j) {
+    //         auto face = mesh->mFaces[j];
+    //         for (int k = 0; k < 3; ++k) {
+    //             IB[3*j+k]=face.mIndices[k];
+    //         }
+    //     }
+    //     float* zart = new float[mesh->mNumVertices*2];
+    //     for (int j = 0; j < mesh->mNumVertices; ++j) {zart[2*j]=mesh->mVertices[j].x;zart[2*j+1]=mesh->mVertices[j].y;}
+    //     delete[] zart;
+    //     delete[] IB;
+    // }
+    love::project::loadProject(pj);
+    auto asset = love::project::getOrLoadAsset(R"(dragon_recon\blender out1.ply)");
+    love::Asset::loadObject(asset);
+    auto mesh = asset->asMesh();
+    uint32_t mesh_ID = mesh->load_via(cb,renderer::mesh_manager::load_static_mesh)[0];
+    auto UVTexAsset=love::project::getOrLoadAsset("UV.png");
+    love::Asset::loadObject(UVTexAsset);
+    auto UvTexID= renderer::image_manager::register_image(UVTexAsset->asImage()->load(cb,VK_IMAGE_USAGE_SAMPLED_BIT,false,{.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE}),VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    renderer::first_renderer::DBG_UVTEX=UvTexID;
     vkEndCommandBuffer(cb);
     VkSubmitInfo submit_info = {
         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
@@ -314,12 +316,16 @@ int main(int, char**)
     vkQueueSubmit(renderer::g_Queue, 1, &submit_info, renderer::thread0_load_fence);
     vkWaitForFences(renderer::device, 1, &renderer::thread0_load_fence, VK_TRUE, UINT64_MAX);
     vkResetFences(renderer::device, 1, &renderer::thread0_load_fence);
+
     auto entity = love::registry.create();
     love::registry.emplace<Transform>(entity,glm::vec3(0,0,0),glm::quat(0,0,0,1),glm::vec3(1,1,1));
     love::registry.emplace<Mesh>(entity,mesh_ID);
     for (int i = 0; i < 24; ++i) {
         auto entity = love::registry.create();
-        love::registry.emplace<Transform>(entity,glm::vec3(2.5*sin(3.1415*i/12.f),-2.5*cos(3.1415*i/12.f),0),glm::angleAxis(3.1415f*i/12.f,glm::vec3(0,0,1.f)),glm::vec3(.25,.25,.25));
+        love::registry.emplace<Transform>(
+            entity,glm::vec3(2.5*sin(3.1415*i/12.f),-2.5*cos(3.1415*i/12.f), 0),
+            glm::angleAxis(3.1415f*i/12.f,glm::vec3(0,0,1.f)),
+            glm::vec3(.25,.25,.25));
         love::registry.emplace<Mesh>(entity,mesh_ID);
     }
     auto cam = love::registry.create();
@@ -369,17 +375,28 @@ int main(int, char**)
         // - When io.WantCaptureMouse is true, do not dispatch mouse input data to your main application, or clear/overwrite your copy of the mouse data.
         // - When io.WantCaptureKeyboard is true, do not dispatch keyboard input data to your main application, or clear/overwrite your copy of the keyboard data.
         // Generally you may always pass all inputs to dear imgui, and hide them from your application based on those two flags.
+        static bool low_fps = true;//checkbox @ IMGUI scope down
         SDL_Event event;
-        SDL_WaitEvent(nullptr);
+        if (low_fps)SDL_WaitEvent(nullptr);
         while (SDL_PollEvent(&event))
         {
             ImGui_ImplSDL3_ProcessEvent(&event);
             editor->check_events(&event);
+            switch (event.type) {
+                case SDL_EVENT_KEY_UP:
+                case SDL_EVENT_KEY_DOWN:
+                case SDL_EVENT_MOUSE_WHEEL:
+                case SDL_EVENT_MOUSE_MOTION:
+                case SDL_EVENT_MOUSE_BUTTON_UP:
+                case SDL_EVENT_MOUSE_BUTTON_DOWN:
+                    break;
+                default:
+                    break;
+            }
             if (event.type == SDL_EVENT_QUIT)
                 done = true;
             if (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED && event.window.windowID == SDL_GetWindowID(renderer::window))
                 done = true;
-
         }
         if (SDL_GetWindowFlags(renderer::window) & SDL_WINDOW_MINIMIZED)
         {
@@ -405,15 +422,12 @@ int main(int, char**)
         ImGui_ImplVulkan_NewFrame();
         ImGui_ImplSDL3_NewFrame();
         ImGui::NewFrame();
-
+        ImGui::Begin("DBG");
+        ImGui::Checkbox("DBG_EVENT_DRIVEN", &low_fps);
+        ImGui::End();
         editor->draw(done);
 
-        {// draw actual frame
-            // int width = 400, height = 300;
-            // renderer::first_renderer::drawFrame(width, height, TODO, TODO);
-            // ImGui::Image(renderer::first_renderer::render_output_image_id, ImVec2(width, height));
-        }
-        // Rendering
+
         ImGui::Render();
         ImDrawData* draw_data = ImGui::GetDrawData();
         const bool is_minimized = (draw_data->DisplaySize.x <= 0.0f || draw_data->DisplaySize.y <= 0.0f);

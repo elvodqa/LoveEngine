@@ -16,7 +16,7 @@
 #include "Renderer.h"
 #include "../debug_panic.h"
 static std::vector<std::function<void()>> cleanups[MAX_INFLIGHT_FRAMES];
-static VkCommandPool commandPools[MAX_INFLIGHT_FRAMES];
+static VkCommandPool command_pools[MAX_INFLIGHT_FRAMES];
 static int currentFrame = 0;
 static void default_cleanup();
 static EngineBuffer bbb;

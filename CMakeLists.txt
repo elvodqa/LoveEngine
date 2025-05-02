@@ -13,6 +13,8 @@ add_subdirectory(external/volk EXCLUDE_FROM_ALL)
 add_subdirectory(external/freetype EXCLUDE_FROM_ALL)
 add_subdirectory(external/nlohmann_json EXCLUDE_FROM_ALL)
 add_subdirectory(external/glm EXCLUDE_FROM_ALL)
+add_subdirectory(external/efsw EXCLUDE_FROM_ALL)
+
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 set(ASSIMP_WARNINGS_AS_ERRORS OFF CACHE BOOL "" FORCE)
 set(ASSIMP_BUILD_ZLIB ON CACHE BOOL "" FORCE)
@@ -31,7 +33,7 @@ set(VULKAN_COMPONENTS
         "SPIRV-Tools"
         "dxc"
 )
-
+include_directories(.)
 add_executable(LoveEngine
         main.cpp
 
@@ -65,8 +67,6 @@ add_executable(LoveEngine
         Renderer/EngineBuffer.h
         Renderer/first_renderer.cpp
         Renderer/first_renderer.h
-        Renderer/ShaderManager.cpp
-        Renderer/ShaderManager.h
         debug_panic.cpp
         ECS/Transform.h
         ECS/Tree.h
@@ -75,8 +75,29 @@ add_executable(LoveEngine
         ECS/Camera.h
         ECS/EditorSelected.h
         editor/InpectorRepr.h
-        editor/defaultspecializers.cpp
+        ProjectManager/projectManager.cpp
+        ProjectManager/projectManager.h
+        Assets/Asset.cpp
+        Assets/Asset.h
+        Assets/Loaders/Image.h
+        Assets/Loaders/Image.cpp
+        Assets/Loaders/Mesh.cpp
+        Assets/Loaders/Mesh.h
+        love/Events/EventList.cpp
+        love/Events/EventList.h
+        love/Events/EventManager.cpp
+        love/Events/EventManager.h
+        Orchestration.cpp
+        Orchestration.h
+        Input/EventSource.cpp
+        Input/EventSource.h
+
+
 )
+if (TARGET efsw-static)
+    target_link_libraries(LoveEngine PRIVATE efsw-static)
+    target_include_directories(LoveEngine PRIVATE external/efsw/include)
+endif ()
 if(TARGET assimp::assimp)
     target_link_libraries(LoveEngine PRIVATE assimp::assimp)
     target_include_directories(LoveEngine PRIVATE external/assimp/include)
@@ -139,6 +160,8 @@ elseif (APPLE)
 elseif (UNIX)
     target_compile_definitions(LoveEngine PRIVATE VK_USE_PLATFORM_XLIB_KHR)
 endif()
+add_compile_definitions(VK_NO_PROTOTYPES)
+
 if (TARGET LoveEngine)
     add_compile_definitions(_DEBUG)
     add_compile_definitions(GLM_FORCE_DEPTH_ZERO_TO_ONE)

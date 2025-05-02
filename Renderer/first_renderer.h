@@ -17,5 +17,6 @@ namespace renderer::first_renderer {
     void init();
     void drawFrame(uint32_t width, uint32_t height, VkSemaphore wait_semaphore_ready2render, VkSemaphore signal_sempahore_ready2blit);
 
+    inline int DBG_UVTEX;
 }
 #endif //FIRSTRENDERER_H

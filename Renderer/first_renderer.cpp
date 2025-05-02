@@ -31,12 +31,18 @@ void renderer::first_renderer::init() {
 
     render_output_image_id = image_manager::register_image(target,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     std::vector<VkDescriptorSetLayout> descriptorSetLayouts({
-        renderer::image_manager::imageSetLayout,
+        renderer::image_manager::image_set_layout,
     });
-    VkPushConstantRange pushranges={
+    VkPushConstantRange pushranges[]={{
         .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
         .offset = 0,
         .size = 32*sizeof(float)
+    },
+    {
+        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+        .offset = 32*sizeof(float),
+        .size = 4*sizeof(uint32_t)
+    }
     };
     VkPipelineLayoutCreateInfo pipelinelayoutcreate={
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
@@ -44,8 +50,8 @@ void renderer::first_renderer::init() {
         .setLayoutCount = (uint32_t)descriptorSetLayouts.size(),
         .pSetLayouts = descriptorSetLayouts.data(),
         .flags = 0,
-        .pPushConstantRanges = &pushranges,
-        .pushConstantRangeCount = 1,
+        .pPushConstantRanges = pushranges,
+        .pushConstantRangeCount = 2,
     };
     vkCreatePipelineLayout(renderer::device,&pipelinelayoutcreate,renderer::g_vk_Allocator,&default_pipeline_layout);
 
@@ -156,19 +162,29 @@ void renderer::first_renderer::init() {
         .flags = 0,
     };
 
-    VkVertexInputBindingDescription bindingDescriptions[2] = {
-        {
+    VkVertexInputBindingDescription bindingDescriptions[4] = {
+        {//pos
             .binding = 0,
             .stride = sizeof(float) * 3,
             .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
         },
-        {
+        {//UV
             .binding = 1,
             .stride = sizeof(float) * 2,
             .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
-        }
+        },
+        {//normal
+            .binding = 2,
+            .stride = sizeof(float) * 3,
+            .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
+        },
+        {//tangent
+            .binding = 3,
+            .stride = sizeof(float) * 3,
+            .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
+        },
     };
-    VkVertexInputAttributeDescription attributeDescriptions[2] = {
+    VkVertexInputAttributeDescription attributeDescriptions[4] = {
         {
             .location = 0,
             .binding = 0,
@@ -180,16 +196,28 @@ void renderer::first_renderer::init() {
             .binding = 1,
             .format = VK_FORMAT_R32G32_SFLOAT,
             .offset = 0,
-        }
+        },
+        {
+            .location = 2,
+            .binding = 2,
+            .format = VK_FORMAT_R32G32B32_SFLOAT,
+            .offset = 0,
+        },
+        {
+            .location = 3,
+            .binding = 3,
+            .format = VK_FORMAT_R32G32B32_SFLOAT,
+            .offset = 0,
+        },
     };
 
     VkPipelineVertexInputStateCreateInfo vertexInputState = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
         .pNext = nullptr,
         .flags = 0,
-        .vertexBindingDescriptionCount = 2,     // Two bindings: position and UV
+        .vertexBindingDescriptionCount = 4,     // Four bindings: position, UV, normal, tangent
         .pVertexBindingDescriptions = bindingDescriptions,
-        .vertexAttributeDescriptionCount = 2,   // Two attributes: position and UV
+        .vertexAttributeDescriptionCount = 4,   // Four attributes: position, UV, normal, tangent
         .pVertexAttributeDescriptions = attributeDescriptions,
     };
 
@@ -290,13 +318,13 @@ void renderer::first_renderer::drawFrame(uint32_t width, uint32_t height, VkSema
         .pDepthAttachment = &depthAttachment,
     };
     target->ChangeImageLayout(cb,VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT);
-    if (depth->imageLayout[0]!=VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL) depth->ChangeImageLayout(cb,VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT|VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT);
+    if (depth->image_layout[0]!=VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL) depth->ChangeImageLayout(cb,VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT|VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT);
     vkCmdBeginRendering(cb,&renderingInfo);
     vkCmdBindPipeline(cb,VK_PIPELINE_BIND_POINT_GRAPHICS,default_pipeline);
     vkCmdBindIndexBuffer(cb,*mesh_manager::static_ib,0,VK_INDEX_TYPE_UINT32);
-    VkBuffer vertexBuffers[2]={*mesh_manager::static_vb,*mesh_manager::static_uvb};
-    constexpr VkDeviceSize offsets[2] = {0, 0};
-    vkCmdBindVertexBuffers(cb,0,2,vertexBuffers,offsets);
+    VkBuffer vertexBuffers[4]={*mesh_manager::static_vb,*mesh_manager::static_uvb,*mesh_manager::static_normalb,*mesh_manager::static_tanb};
+    constexpr VkDeviceSize offsets[4] = {0, 0, 0, 0};
+    vkCmdBindVertexBuffers(cb,0,4,vertexBuffers,offsets);
 
     VkRect2D sci={.offset = {0,0}, .extent = {width,height}};
     VkViewport viewport={.x=0, .y=0, .width=(float)width, .height=(float)height, .minDepth=0, .maxDepth=1.f};
@@ -310,16 +338,19 @@ void renderer::first_renderer::drawFrame(uint32_t width, uint32_t height, VkSema
     auto viewproj = proj * view;
     vkCmdPushConstants(cb,default_pipeline_layout,VK_SHADER_STAGE_VERTEX_BIT,0,16*sizeof(float),&viewproj);
     auto defaultmodel = glm::mat4(1.f);
-
+if (!image_manager::descriptorset) panic("");
     vkCmdPushConstants(cb,default_pipeline_layout,VK_SHADER_STAGE_VERTEX_BIT,16*sizeof(float), 16*sizeof(float),&defaultmodel);
-
     vkCmdBindDescriptorSets(cb,VK_PIPELINE_BIND_POINT_GRAPHICS,default_pipeline_layout,0,1, &image_manager::descriptorset,0,nullptr);
+
     {
         regview.each([&](auto id,Mesh& meshComp,Transform& transform) {
             auto mesh = mesh_manager::meshes[meshComp.meshID];
             auto mod=transform.getTransformMatrix();
 
             vkCmdPushConstants(cb,default_pipeline_layout,VK_SHADER_STAGE_VERTEX_BIT,16*sizeof(float), 16*sizeof(float),&mod);
+            uint32_t texID=0;
+            vkCmdPushConstants(cb,default_pipeline_layout,VK_SHADER_STAGE_FRAGMENT_BIT,32*sizeof(float),1*sizeof(uint32_t),&renderer::first_renderer::DBG_UVTEX);
+
             vkCmdDrawIndexed(cb,mesh.index_count,1,mesh.index_offset,mesh.vertex_offset,0);
 
         });

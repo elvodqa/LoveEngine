@@ -75,5 +75,14 @@ inline extern void vkc(VkResult result,panic_dynamic_string_view fail_text="") {
     panic(fail_text);
   }
 }
+template<typename... Args>
+requires requires(Args&&... args) {
+    panic(std::forward<Args>(args)...);
+}
+void panic_dbg(Args&&... args) {
+#ifdef _DEBUG
+    panic(std::forward<Args>(args)...);
+#endif
+}
 
 #endif //DEBUG_PANIC_H

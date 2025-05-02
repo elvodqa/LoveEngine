@@ -11,12 +11,15 @@ namespace renderer::mesh_manager {
         uint32_t index_offset;
         uint32_t index_count;
         uint32_t UV_offset;
+        uint32_t tangent_offset;
+        uint32_t normal_offset;
     };
     inline std::vector<Mesh> meshes;
-    inline EngineBuffer *static_vb, *static_ib, *static_uvb;
+    inline EngineBuffer *static_vb, *static_ib, *static_uvb,*static_tanb, *static_normalb;
     void init();
 
-    int load_static_mesh(VkCommandBuffer cb,uint32_t* vertices, uint32_t vtx_count, uint32_t* indices, uint32_t idx_count, float* UVs);
+    int load_static_mesh(VkCommandBuffer cb, float *vertices, uint32_t vtx_count, uint32_t *indices, uint32_t idx_count, float *UVs, float *
+                         normals, float *tangents);
 
 }
 namespace renderer {

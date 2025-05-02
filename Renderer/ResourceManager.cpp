@@ -16,7 +16,7 @@ VkCommandBuffer make_cb_for_frame() {
     VkCommandBuffer cb;
     VkCommandBufferAllocateInfo allocInfo = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-        .commandPool = commandPools[currentFrame%MAX_INFLIGHT_FRAMES],
+        .commandPool = command_pools[currentFrame%MAX_INFLIGHT_FRAMES],
         .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
         .commandBufferCount = 1
     };
@@ -35,7 +35,7 @@ void init_frame_resource_manager() {
         .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
         .queueFamilyIndex = renderer::g_QueueFamily,
     };
-    for (auto & commandPool : commandPools)
+    for (auto & commandPool : command_pools)
         vkCreateCommandPool(renderer::device, &pool_info, renderer::g_vk_Allocator, &commandPool);
 }
 

@@ -9,6 +9,6 @@
     std::fputs(s, stderr);
     __asm__("nop");
     cpptrace::generate_trace().print();
-    *(int*)0=0xf;
+    __builtin_trap();
     std::abort();
 }

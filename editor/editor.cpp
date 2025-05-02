@@ -730,14 +730,6 @@ struct ExtractComponentType<entt::basic_storage<ComponentType, EntityType, Alloc
 void love::Editor::showInspectorHierarchy() {
     ImGui::Begin("Inspector");
     ImGui::Text("Inspector");
-    // Storing items data separately from selection data.
-    // (you may decide to store selection data inside your item (aka intrusive storage) if you don't need multiple views over same items)
-    // Use a custom selection.Adapter: store item identifier in Selection (instead of index)
-
-    ImGui::Text("Added features:");
-    ImGui::BulletText("Dynamic list with Delete key support.");
-
-    // Initialize default list with 50 items + button to add/remove items.
 
     auto v=::love::registry.view<entt::entity>();
     char buf[64];
@@ -826,10 +818,11 @@ void love::Editor::showInspectorEditor() {
                 // Check if the entity exists in the current storage
                 if (storage.contains(e)) {
                     auto mapped = editor::typeCB[storage.type().hash()];
-                    if (mapped)mapped(storage.value(e));
+                    if (mapped) mapped(storage.value(e));
                     else __asm__("nop");
                 }
             }
+            ImGui::Separator();
         });
     }
     ImGui::End();

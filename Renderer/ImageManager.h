@@ -10,10 +10,10 @@ namespace renderer::image_manager {
         int next_free_slot;
         const EngineImage* ptr;
     }descriptorListSlot;
-    static VkDescriptorPool pool;
-    inline VkDescriptorSetLayout imageSetLayout;
+    inline VkDescriptorPool pool;
+    inline VkDescriptorSetLayout image_set_layout;
     static std::vector<descriptorListSlot> descriptors;
-    static VkDescriptorSet descriptorset;
+    inline VkDescriptorSet descriptorset;
     static int free_list_head = -1;
     constexpr int SAMPLER_BINDING=0;
     constexpr int IMAGE_BINDING=1;

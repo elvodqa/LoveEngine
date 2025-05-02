@@ -20,11 +20,11 @@ EngineImage * EngineImage::createImage_unallocated(uint32_t width, uint32_t heig
     image->height = height;
     image->format = format;
     image->mipcount = mipcount;
-    image->imageLayout.resize(mipcount);
+    image->image_layout.resize(mipcount);
     image->width = width;
     image->height = height;
 
-    std::fill(image->imageLayout.begin(), image->imageLayout.end(), VK_IMAGE_LAYOUT_UNDEFINED);
+    std::fill(image->image_layout.begin(), image->image_layout.end(), VK_IMAGE_LAYOUT_UNDEFINED);
     VkImageCreateInfo info = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
         .imageType = VK_IMAGE_TYPE_2D,
@@ -40,7 +40,7 @@ EngineImage * EngineImage::createImage_unallocated(uint32_t width, uint32_t heig
         .pQueueFamilyIndices = &renderer::g_QueueFamily,
         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
     };
-    vkCreateImage(renderer::device, &info, renderer::g_vk_Allocator,&image->deviceImage);
+    vkCreateImage(renderer::device, &info, renderer::g_vk_Allocator,&image->device_image);
     return image;
 }
 
@@ -68,10 +68,10 @@ EngineImage *EngineImage::createImage(uint32_t width, uint32_t height, VkFormat 
     image->height = height;
     image->format = format;
     image->mipcount = mipcount;
-    image->imageLayout.resize(mipcount);
+    image->image_layout.resize(mipcount);
     image->width = width;
     image->height = height;
-    std::fill(image->imageLayout.begin(), image->imageLayout.end(), VK_IMAGE_LAYOUT_UNDEFINED);
+    std::fill(image->image_layout.begin(), image->image_layout.end(), VK_IMAGE_LAYOUT_UNDEFINED);
     VkImageCreateInfo info = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
         .imageType = VK_IMAGE_TYPE_2D,
@@ -87,7 +87,7 @@ EngineImage *EngineImage::createImage(uint32_t width, uint32_t height, VkFormat 
         .pQueueFamilyIndices = &renderer::g_QueueFamily,
         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
     };
-    vmaCreateImage(renderer::vma_allocator,&info,&alloc_info,&image->deviceImage,&image->allocation,&image->allocInfo);
+    vkc(vmaCreateImage(renderer::vma_allocator,&info,&alloc_info,&image->device_image,&image->allocation,&image->alloc_info));
     VkImageViewCreateInfo viewInfo = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
         .components = VK_COMPONENT_SWIZZLE_IDENTITY,
@@ -102,7 +102,7 @@ EngineImage *EngineImage::createImage(uint32_t width, uint32_t height, VkFormat 
         },
         .viewType = VK_IMAGE_VIEW_TYPE_2D,
     };
-    vkCreateImageView(renderer::device,&viewInfo,renderer::g_vk_Allocator,&image->imageView);
+    vkc(vkCreateImageView(renderer::device,&viewInfo,renderer::g_vk_Allocator,&image->image_view));
     return  image;
 }
 constexpr VkImageAspectFlags aspect_from_format(VkFormat format) {
@@ -141,10 +141,13 @@ VkImageView EngineImage::createAdditionalImageView(EngineImage &image) {
 }
 
 void EngineImage::destroyImage(EngineImage *image) {
+
     if (image->allocation) {
-        vmaDestroyImage(renderer::vma_allocator,image->deviceImage,image->allocation);
-        vkDestroyImageView(renderer::device,image->imageView,renderer::g_vk_Allocator);
-    }else panic("destroying non VMA not implemented");
+        vmaDestroyImage(renderer::vma_allocator,image->device_image,image->allocation);
+        vkDestroyImageView(renderer::device,image->image_view,renderer::g_vk_Allocator);
+    }else if (image->stbi_ptr) stbi_image_free(image->stbi_ptr);
+    else panic("destroying non VMA non mem-only image is not implemented");
+
 }
 
 // EngineImage* EngineImage::make(VkCommandBuffer cb, ResourceLocator image_source, VkImageUsageFlags usage,bool generate_mips) {
@@ -194,14 +197,14 @@ void EngineImage::destroyImage(EngineImage *image) {
 //         .imageOffset = {0,0,0},
 //         .imageExtent = {width,height,1},
 //     };
-//     vkCmdCopyBufferToImage(cb,local_tmp,image->deviceImage,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,1, &region);
+//     vkCmdCopyBufferToImage(cb,local_tmp,image->device_image,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,1, &region);
 //
 //     return image;
 // }
 
 void EngineImage::ChangeImageLayout(VkCommandBuffer cb, VkImageLayout newLayout,
                                     VkPipelineStageFlags dst_stage, VkAccessFlags dst_access, uint32_t mip_start, uint32_t mip_count) {
-    auto oldlayout = imageLayout[mip_start];
+    auto oldlayout = image_layout[mip_start];
     if (mip_count == (uint32_t)-1) mip_count = this->mipcount;
     VkImageMemoryBarrier barrier = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
@@ -211,13 +214,13 @@ void EngineImage::ChangeImageLayout(VkCommandBuffer cb, VkImageLayout newLayout,
         .newLayout = newLayout,
         .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
         .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .image = deviceImage,
+        .image = device_image,
         .subresourceRange = {aspect_from_format(format),mip_start,mip_count,0,1},
     };
     vkCmdPipelineBarrier(cb,last_used_stage,dst_stage,0,0,nullptr,0,nullptr,1,&barrier);
     for(uint32_t i=0;i<mip_count;i++) {
-        if (oldlayout!=imageLayout[mip_start + i]) panic("mixed mip layout in single transition");
-        imageLayout[mip_start + i] = newLayout;
+        if (oldlayout!=image_layout[mip_start + i]) panic("mixed mip layout in single transition");
+        image_layout[mip_start + i] = newLayout;
     }
     last_used_access = dst_access;
     last_used_stage = dst_stage;
