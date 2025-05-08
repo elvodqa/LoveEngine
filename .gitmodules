@@ -31,8 +31,8 @@
 	url = https://github.com/g-truc/glm
 [submodule "external/imgui"]
 	path = external/imgui
-	url = https://github.com/ocornut/imgui
-	branch = docking
+	url = https://github.com/yahay505/imgui
+	branch = custom_fixes_brach
 [submodule "external/stb"]
 	path = external/stb
 	url = https://github.com/nothings/stb.git
@@ -42,3 +42,4 @@
 [submodule "external/efsw"]
 	path = external/efsw
 	url = https://github.com/SpartanJ/efsw
+
